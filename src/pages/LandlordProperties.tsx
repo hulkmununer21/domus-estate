@@ -4,10 +4,6 @@ import {
   ClipboardList,
   Users,
   Calendar,
-  Plus,
-  Edit,
-  Trash2,
-  X,
   CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +13,6 @@ import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { toast } from "sonner";
 
 const TABS = [
   { key: "properties", label: "Properties", icon: <Home className="h-4 w-4 mr-1" /> },
@@ -37,14 +32,6 @@ const LandlordProperties = () => {
   const [lodgers, setLodgers] = useState<any[]>([]);
   const [leases, setLeases] = useState<any[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
-  const [selectedUnit, setSelectedUnit] = useState<any>(null);
-  const [showAddPropertyModal, setShowAddPropertyModal] = useState(false);
-  const [showEditPropertyModal, setShowEditPropertyModal] = useState(false);
-  const [showAddUnitModal, setShowAddUnitModal] = useState(false);
-  const [showEditUnitModal, setShowEditUnitModal] = useState(false);
-  const [propertyForm, setPropertyForm] = useState<any>({});
-  const [unitForm, setUnitForm] = useState<any>({});
-  const [formLoading, setFormLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [propertyTypeOptions, setPropertyTypeOptions] = useState<any[]>([]);
 
@@ -142,72 +129,11 @@ const LandlordProperties = () => {
     setActiveTab("units");
   };
 
-  const handleSelectUnit = (unit: any) => {
-    setSelectedUnit(unit);
-    setActiveTab("lodgers");
-  };
-
-  // Add Property Modal
-  const handleAddProperty = () => {
-    setPropertyForm({});
-    setShowAddPropertyModal(true);
-  };
-
-  const handlePropertyFormChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    setPropertyForm({ ...propertyForm, [e.target.name]: e.target.value });
-  };
-
-  const submitAddProperty = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormLoading(true);
-
-    const insertData = {
-      title: propertyForm.title,
-      description: propertyForm.description || "",
-      property_type_id: propertyForm.property_type_id,
-      address: propertyForm.address,
-      city: propertyForm.city,
-      postal_code: propertyForm.postal_code,
-      year_built: propertyForm.year_built ? Number(propertyForm.year_built) : null,
-      total_units: propertyForm.total_units ? Number(propertyForm.total_units) : null,
-      landlord_user_id: landlordUserId,
-      status: false,
-      is_published: false,
-      created_at: new Date().toISOString(),
-    };
-
-    if (
-      !propertyForm.title ||
-      !propertyForm.property_type_id ||
-      !propertyForm.address ||
-      !propertyForm.city ||
-      !propertyForm.postal_code
-    ) {
-      toast.error("Title, Property Type, Address, City, and Postal Code are required.");
-      setFormLoading(false);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("properties")
-      .insert([insertData]);
-    setFormLoading(false);
-    if (error) {
-      toast.error("Failed to add property.");
-    } else {
-      toast.success("Property added! Awaiting admin approval.");
-      setShowAddPropertyModal(false);
-      fetchProperties();
-    }
-  };
-
   return (
     <>
       <SEO
         title="Landlord Properties - Domus Servitia"
-        description="Manage your properties, units, lodgers, and leases/bookings."
+        description="View your properties, units, lodgers, and leases/bookings."
         canonical="https://domusservitia.co.uk/landlord-properties"
       />
       <div className="min-h-screen bg-muted/30">
@@ -287,10 +213,6 @@ const LandlordProperties = () => {
                   onChange={e => setSearch(e.target.value)}
                   className="max-w-xs"
                 />
-                <Button onClick={handleAddProperty} variant="default">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Property
-                </Button>
               </div>
               <Card className="border-border">
                 <CardHeader>
@@ -306,7 +228,7 @@ const LandlordProperties = () => {
                           <th className="py-2 px-2 text-left">Address</th>
                           <th className="py-2 px-2 text-left">Status</th>
                           <th className="py-2 px-2 text-left">Units</th>
-                          <th className="py-2 px-2 text-left">Actions</th>
+                          <th className="py-2 px-2 text-left">View</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -340,29 +262,12 @@ const LandlordProperties = () => {
                               </td>
                               <td className="py-2 px-2 flex gap-2">
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleSelectProperty(property)}
                                   aria-label="View Units"
                                 >
-                                  <ClipboardList className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setShowEditPropertyModal(true)}
-                                  aria-label="Edit"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Delete"
-                                  onClick={() => toast.info("Delete property feature coming soon.")}
-                                  disabled={formLoading}
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                  View Units
                                 </Button>
                               </td>
                             </tr>
@@ -375,118 +280,161 @@ const LandlordProperties = () => {
             </div>
           )}
 
-          {/* Add Property Modal (Scrollable) */}
-          {showAddPropertyModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-              <div className="bg-card rounded-lg shadow-lg w-full max-w-md relative p-0 flex flex-col">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <span className="font-semibold text-lg">Add Property</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowAddPropertyModal(false)}
-                    aria-label="Close"
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-                <div
-                  className="overflow-y-auto px-6 py-4"
-                  style={{ maxHeight: "70vh" }}
-                >
-                  <form onSubmit={submitAddProperty} className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Title</label>
-                      <input
-                        name="title"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.title || ""}
-                        onChange={handlePropertyFormChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Description</label>
-                      <textarea
-                        name="description"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.description || ""}
-                        onChange={handlePropertyFormChange}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Property Type</label>
-                      <select
-                        name="property_type_id"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.property_type_id || ""}
-                        onChange={handlePropertyFormChange}
-                        required
-                      >
-                        <option value="">Select type</option>
-                        {propertyTypeOptions.map(type => (
-                          <option key={type.id} value={type.id}>
-                            {type.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Address</label>
-                      <input
-                        name="address"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.address || ""}
-                        onChange={handlePropertyFormChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">City</label>
-                      <input
-                        name="city"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.city || ""}
-                        onChange={handlePropertyFormChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Postal Code</label>
-                      <input
-                        name="postal_code"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.postal_code || ""}
-                        onChange={handlePropertyFormChange}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Year Built</label>
-                      <input
-                        name="year_built"
-                        type="number"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.year_built || ""}
-                        onChange={handlePropertyFormChange}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Total Units</label>
-                      <input
-                        name="total_units"
-                        type="number"
-                        className="w-full px-3 py-2 border border-border rounded-md"
-                        value={propertyForm.total_units || ""}
-                        onChange={handlePropertyFormChange}
-                      />
-                    </div>
-                    <Button type="submit" disabled={formLoading} className="w-full">
-                      {formLoading ? "Adding..." : "Add Property"}
+          {/* Units Tab */}
+          {activeTab === "units" && selectedProperty && (
+            <div>
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle>
+                    Units for {selectedProperty.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="py-2 px-2 text-left">Unit Label</th>
+                          <th className="py-2 px-2 text-left">Bedrooms</th>
+                          <th className="py-2 px-2 text-left">Bathrooms</th>
+                          <th className="py-2 px-2 text-left">Area (sqft)</th>
+                          <th className="py-2 px-2 text-left">Furnished</th>
+                          <th className="py-2 px-2 text-left">Rent</th>
+                          <th className="py-2 px-2 text-left">Deposit</th>
+                          <th className="py-2 px-2 text-left">Available From</th>
+                          <th className="py-2 px-2 text-left">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {units
+                          .filter((u: any) => u.property_id === selectedProperty.id)
+                          .map(unit => (
+                            <tr key={unit.id} className="border-b border-border hover:bg-muted/40">
+                              <td className="py-2 px-2">{unit.unit_label}</td>
+                              <td className="py-2 px-2">{unit.bedrooms}</td>
+                              <td className="py-2 px-2">{unit.bathrooms}</td>
+                              <td className="py-2 px-2">{unit.area_sqft}</td>
+                              <td className="py-2 px-2">{unit.furnished ? "Yes" : "No"}</td>
+                              <td className="py-2 px-2">
+                                {unit.rent_amount_cents
+                                  ? `${(unit.rent_amount_cents / 100).toLocaleString()} ${unit.rent_currency || "USD"}`
+                                  : ""}
+                              </td>
+                              <td className="py-2 px-2">
+                                {unit.deposit_cents
+                                  ? `${(unit.deposit_cents / 100).toLocaleString()}`
+                                  : ""}
+                              </td>
+                              <td className="py-2 px-2">{unit.available_from}</td>
+                              <td className="py-2 px-2">{unit.status}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4">
+                    <Button variant="outline" onClick={() => setActiveTab("properties")}>
+                      Back to Properties
                     </Button>
-                  </form>
-                </div>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Lodgers Tab */}
+          {activeTab === "lodgers" && (
+            <div>
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle>Active Lodgers</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="py-2 px-2 text-left">Name</th>
+                          <th className="py-2 px-2 text-left">Email</th>
+                          <th className="py-2 px-2 text-left">Phone</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lodgers.map(lodger => (
+                          <tr key={lodger.user_id} className="border-b border-border hover:bg-muted/40">
+                            <td className="py-2 px-2">
+                              {lodger.first_name} {lodger.last_name}
+                            </td>
+                            <td className="py-2 px-2">{lodger.email}</td>
+                            <td className="py-2 px-2">{lodger.phone_number}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Leases Tab */}
+          {activeTab === "leases" && (
+            <div>
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle>Leases/Bookings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="py-2 px-2 text-left">Unit</th>
+                          <th className="py-2 px-2 text-left">Lodger</th>
+                          <th className="py-2 px-2 text-left">Status</th>
+                          <th className="py-2 px-2 text-left">Start Date</th>
+                          <th className="py-2 px-2 text-left">End Date</th>
+                          <th className="py-2 px-2 text-left">Rent</th>
+                          <th className="py-2 px-2 text-left">Deposit</th>
+                          <th className="py-2 px-2 text-left">Payment Day</th>
+                          <th className="py-2 px-2 text-left">Signed At</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leases.map(lease => {
+                          const unit = units.find((u: any) => u.id === lease.unit_id);
+                          const lodger = lodgers.find((l: any) => l.user_id === lease.lodger_user_id);
+                          return (
+                            <tr key={lease.id} className="border-b border-border hover:bg-muted/40">
+                              <td className="py-2 px-2">{unit?.unit_label || ""}</td>
+                              <td className="py-2 px-2">
+                                {lodger
+                                  ? `${lodger.first_name} ${lodger.last_name}`
+                                  : ""}
+                              </td>
+                              <td className="py-2 px-2">{lease.status}</td>
+                              <td className="py-2 px-2">{lease.start_date}</td>
+                              <td className="py-2 px-2">{lease.end_date}</td>
+                              <td className="py-2 px-2">
+                                {lease.rent_amount_cents
+                                  ? `${(lease.rent_amount_cents / 100).toLocaleString()} ${lease.rent_currency || "USD"}`
+                                  : ""}
+                              </td>
+                              <td className="py-2 px-2">
+                                {lease.deposit_cents
+                                  ? `${(lease.deposit_cents / 100).toLocaleString()}`
+                                  : ""}
+                              </td>
+                              <td className="py-2 px-2">{lease.payment_day_of_month}</td>
+                              <td className="py-2 px-2">{lease.signed_at}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>
