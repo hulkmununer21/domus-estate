@@ -24,6 +24,7 @@ import logo from "@/assets/logo.png";
 
 const MANAGEMENT_LINKS = [
   { icon: Home, label: "Properties", count: "124", to: "/admin-properties" },
+   { icon: Home, label: "Units", count: "124", to: "/admin-units" },
   { icon: Users, label: "Lodgers", count: "98", to: "/admin-lodgers" },
   { icon: Users, label: "Landlords", count: "45", to: "/admin-landlords" },
   { icon: Users, label: "Staff", count: "24", to: "/admin-staff" },

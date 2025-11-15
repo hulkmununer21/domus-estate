@@ -247,7 +247,7 @@ const LandlordProperties = () => {
                                 {property.address}, {property.city} {property.postal_code}
                               </td>
                               <td className="py-2 px-2">
-                                {property.status ? (
+                                {property.is_published ? (
                                   <span className="text-green-600 font-semibold flex items-center gap-1">
                                     <CheckCircle className="h-4 w-4" /> Approved
                                   </span>
@@ -316,13 +316,13 @@ const LandlordProperties = () => {
                               <td className="py-2 px-2">{unit.area_sqft}</td>
                               <td className="py-2 px-2">{unit.furnished ? "Yes" : "No"}</td>
                               <td className="py-2 px-2">
-                                {unit.rent_amount_cents
-                                  ? `${(unit.rent_amount_cents / 100).toLocaleString()} ${unit.rent_currency || "USD"}`
+                                {unit.rent_amount
+                                  ? `${(unit.rent_amount).toLocaleString()} ${unit.rent_currency || "USD"}`
                                   : ""}
                               </td>
                               <td className="py-2 px-2">
-                                {unit.deposit_cents
-                                  ? `${(unit.deposit_cents / 100).toLocaleString()}`
+                                {unit.deposit_amount
+                                  ? `${(unit.deposit_amount).toLocaleString()}`
                                   : ""}
                               </td>
                               <td className="py-2 px-2">{unit.available_from}</td>
@@ -354,21 +354,27 @@ const LandlordProperties = () => {
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="border-b border-border">
-                          <th className="py-2 px-2 text-left">Name</th>
-                          <th className="py-2 px-2 text-left">Email</th>
-                          <th className="py-2 px-2 text-left">Phone</th>
+                          <th className="py-2 px-2 text-left">Unit</th>
+                          <th className="py-2 px-2 text-left">Lodger</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {lodgers.map(lodger => (
-                          <tr key={lodger.user_id} className="border-b border-border hover:bg-muted/40">
-                            <td className="py-2 px-2">
-                              {lodger.first_name} {lodger.last_name}
-                            </td>
-                            <td className="py-2 px-2">{lodger.email}</td>
-                            <td className="py-2 px-2">{lodger.phone_number}</td>
-                          </tr>
-                        ))}
+                        {leases
+                          .filter(lease => lease.status === "occupied")
+                          .map(lease => {
+                            const unit = units.find((u: any) => u.id === lease.unit_id);
+                            const lodger = lodgers.find((l: any) => l.user_id === lease.lodger_user_id);
+                            return (
+                              <tr key={lease.id} className="border-b border-border hover:bg-muted/40">
+                                <td className="py-2 px-2">{unit?.unit_label || ""}</td>
+                                <td className="py-2 px-2">
+                                  {lodger
+                                    ? `${lodger.first_name} ${lodger.last_name}`
+                                    : ""}
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>

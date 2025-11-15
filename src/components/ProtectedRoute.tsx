@@ -1,42 +1,36 @@
 import { ReactNode, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, Role } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowedRoles?: Array<"lodger" | "landlord" | "staff" | "admin">;
+  allowedRoles?: Role[];
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const { user } = useAuth();
-  const isAuthenticated = !!user;
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!user) {
+      // Not logged in
       navigate("/login", { replace: true });
       return;
     }
 
-    if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-      // Redirect to their appropriate portal
-      const routes = {
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      // Logged in but not authorized for this route
+      const portalMap: Record<Role, string> = {
         lodger: "/lodger-portal",
         landlord: "/landlord-portal",
         staff: "/staff-portal",
         admin: "/admin-portal",
       };
-      navigate(routes[user.role], { replace: true });
+      navigate(portalMap[user.role], { replace: true });
     }
-  }, [isAuthenticated, user, allowedRoles, navigate]);
+  }, [user, allowedRoles, navigate]);
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    return null;
-  }
+  if (!user || (allowedRoles && !allowedRoles.includes(user.role))) return null;
 
   return <>{children}</>;
 };

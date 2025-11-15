@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
@@ -21,7 +21,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    // Load user from localStorage on initial load
+    const storedUser = localStorage.getItem("domus-user");
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+
+  // Optional: Listen to Supabase auth changes
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        setUser(null);
+        localStorage.removeItem("domus-user");
+      }
+    });
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   const login = async (email: string, password: string, selectedRole: Role) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -29,14 +46,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       toast.error("Invalid email or password.");
       return { success: false };
     }
+
     const userId = data.user.id;
 
-    // Check if user exists in the selected profile table
-    let profileTable = "";
-    if (selectedRole === "admin") profileTable = "admin_profiles";
-    else if (selectedRole === "landlord") profileTable = "landlord_profiles";
-    else if (selectedRole === "staff") profileTable = "staff_profiles";
-    else if (selectedRole === "lodger") profileTable = "lodger_profiles";
+    // Determine profile table
+    const profileTableMap: Record<Role, string> = {
+      admin: "admin_profiles",
+      landlord: "landlord_profiles",
+      staff: "staff_profiles",
+      lodger: "lodger_profiles",
+    };
+
+    const profileTable = profileTableMap[selectedRole];
 
     const { data: profile } = await supabase
       .from(profileTable)
@@ -55,6 +76,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       role: selectedRole,
       name: email.split("@")[0],
     };
+
     setUser(userData);
     localStorage.setItem("domus-user", JSON.stringify(userData));
 
@@ -65,7 +87,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     localStorage.removeItem("domus-user");
     supabase.auth.signOut();
-    // Navigation should be handled in the page/component
   };
 
   return (

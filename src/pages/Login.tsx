@@ -19,15 +19,18 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     const result = await login(email, password, role);
     setLoading(false);
+
     if (result?.success) {
+      // Redirect user based on role
       if (role === "admin") navigate("/admin-portal");
       else if (role === "landlord") navigate("/landlord-portal");
       else if (role === "staff") navigate("/staff-portal");
       else navigate("/lodger-portal");
     }
-    // Errors are handled in AuthContext via toast
+    // Errors are handled via toast in AuthContext
   };
 
   return (
@@ -38,11 +41,16 @@ const Login = () => {
         keywords="domus servitia login, property portal login, landlord login, lodger portal, property management login"
         canonical="https://domusservitia.co.uk/login"
       />
+
       <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <Link to="/" className="inline-block mb-6">
-              <img src={logo} alt="Domus Servitia" className="h-20 mx-auto rounded-xl shadow-md" />
+              <img
+                src={logo}
+                alt="Domus Servitia"
+                className="h-20 mx-auto rounded-xl shadow-md"
+              />
             </Link>
             <h1 className="font-serif text-3xl font-bold text-foreground mb-2">
               Welcome Back
@@ -61,6 +69,8 @@ const Login = () => {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLogin} className="space-y-4">
+
+                {/* Role selection */}
                 <div className="space-y-2">
                   <Label htmlFor="role">Login as</Label>
                   <select
@@ -76,6 +86,7 @@ const Login = () => {
                   </select>
                 </div>
 
+                {/* Email input */}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
                   <Input
@@ -88,6 +99,7 @@ const Login = () => {
                   />
                 </div>
 
+                {/* Password input */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
@@ -108,6 +120,7 @@ const Login = () => {
                   />
                 </div>
 
+                {/* Submit button */}
                 <Button
                   type="submit"
                   className="w-full bg-gradient-gold text-primary font-semibold shadow-gold hover:shadow-lifted"
@@ -117,11 +130,15 @@ const Login = () => {
                 </Button>
               </form>
 
+              {/* Sign up link */}
               <div className="mt-6 text-center text-sm">
                 <span className="text-muted-foreground">
                   Don't have an account?{" "}
                 </span>
-                <Link to="/signup" className="text-accent font-semibold hover:underline">
+                <Link
+                  to="/signup"
+                  className="text-accent font-semibold hover:underline"
+                >
                   Sign up
                 </Link>
               </div>
@@ -129,7 +146,10 @@ const Login = () => {
           </Card>
 
           <div className="mt-6 text-center">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-accent">
+            <Link
+              to="/"
+              className="text-sm text-muted-foreground hover:text-accent"
+            >
               ← Back to Home
             </Link>
           </div>
