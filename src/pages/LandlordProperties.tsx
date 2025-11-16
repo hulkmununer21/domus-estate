@@ -226,6 +226,7 @@ const LandlordProperties = () => {
                           <th className="py-2 px-2 text-left">Title</th>
                           <th className="py-2 px-2 text-left">Type</th>
                           <th className="py-2 px-2 text-left">Address</th>
+                          <th className="py-2 px-2 text-left">Year Built</th>
                           <th className="py-2 px-2 text-left">Status</th>
                           <th className="py-2 px-2 text-left">Units</th>
                           <th className="py-2 px-2 text-left">View</th>
@@ -246,6 +247,7 @@ const LandlordProperties = () => {
                               <td className="py-2 px-2">
                                 {property.address}, {property.city} {property.postal_code}
                               </td>
+                              <td className="py-2 px-2">{property.year_built}</td>
                               <td className="py-2 px-2">
                                 {property.is_published ? (
                                   <span className="text-green-600 font-semibold flex items-center gap-1">

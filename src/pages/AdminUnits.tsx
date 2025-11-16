@@ -19,7 +19,7 @@ const AdminUnits = () => {
   const [showPreviewUnit, setShowPreviewUnit] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<any>(null);
 
-  // add/edit form state (no 'images' column)
+  // add/edit form state (omit is_published)
   const [unitForm, setUnitForm] = useState<any>({
     property_id: "",
     unit_label: "",
@@ -34,6 +34,7 @@ const AdminUnits = () => {
     status: "draft",
     unit_description: "",
     unit_features: [],
+    is_featured: false,
   });
 
   const [unitImageFiles, setUnitImageFiles] = useState<File[]>([]);
@@ -140,7 +141,8 @@ const AdminUnits = () => {
           ...unitForm, 
           rent_amount, 
           deposit_amount, 
-          unit_features: unitForm.unit_features 
+          unit_features: unitForm.unit_features,
+          is_featured: unitForm.is_featured,
         }])
         .select()
         .single();
@@ -211,6 +213,7 @@ const AdminUnits = () => {
         status: "draft",
         unit_description: "",
         unit_features: [],
+        is_featured: false,
       });
       setUnitImageFiles([]);
       await fetchUnits();
@@ -224,7 +227,7 @@ const AdminUnits = () => {
   // Open edit modal
   const openEditUnit = (unit: any) => {
     setEditFeatures(unit.unit_features || []);
-    setUnitForm({ ...unit, unit_features: unit.unit_features || [] });
+    setUnitForm({ ...unit, unit_features: unit.unit_features || [], is_featured: !!unit.is_featured });
     const imagesForUnit = unitImages.filter((img: any) => img.unit_id === unit.id);
     setEditImages(imagesForUnit);
     setEditImageFiles([]);
@@ -242,7 +245,13 @@ const AdminUnits = () => {
 
       const { error } = await supabase
         .from("property_units")
-        .update({ ...updateData, rent_amount, deposit_amount, unit_features: unitForm.unit_features })
+        .update({ 
+          ...updateData, 
+          rent_amount, 
+          deposit_amount, 
+          unit_features: unitForm.unit_features,
+          is_featured: unitForm.is_featured,
+        })
         .eq("id", id);
 
       if (error) {
@@ -267,6 +276,7 @@ const AdminUnits = () => {
         status: "draft",
         unit_description: "",
         unit_features: [],
+        is_featured: false,
       });
       setUnitImageFiles([]);
       await fetchUnits();
@@ -426,6 +436,7 @@ const AdminUnits = () => {
                       <th className="py-2 px-2">Deposit</th>
                       <th className="py-2 px-2">Available From</th>
                       <th className="py-2 px-2">Status</th>
+                      <th className="py-2 px-2">Featured</th>
                       <th className="py-2 px-2">Actions</th>
                     </tr>
                   </thead>
@@ -453,6 +464,7 @@ const AdminUnits = () => {
                           <td className="py-2 px-2">{unit.deposit_amount ? `${unit.deposit_amount.toLocaleString()}` : ""}</td>
                           <td className="py-2 px-2">{unit.available_from}</td>
                           <td className="py-2 px-2">{unit.status}</td>
+                          <td className="py-2 px-2">{unit.is_featured ? "Yes" : "No"}</td>
                           <td className="py-2 px-2 flex gap-2">
                             <Button variant="outline" size="icon" aria-label="Preview" onClick={() => openPreviewUnit(unit)}>
                               <Eye className="h-4 w-4" />
@@ -493,8 +505,225 @@ const AdminUnits = () => {
                 <CardContent>
                   <div className="max-h-[80vh] overflow-y-auto py-2 px-1">
                     <form className="space-y-4" onSubmit={handleAddUnit}>
-                      {/* ...same as previous add unit form... */}
-                      {/* See previous code for full implementation */}
+                      {/* ...existing fields... */}
+                      <label className="block mb-1 font-medium" htmlFor="property_id">Property</label>
+                      <select
+                        id="property_id"
+                        className="w-full border rounded px-2 py-2"
+                        value={unitForm.property_id}
+                        onChange={e => setUnitForm({ ...unitForm, property_id: e.target.value })}
+                        required
+                      >
+                        <option value="">Select Property</option>
+                        {properties.map(p => (
+                          <option key={p.id} value={p.id}>{p.title}</option>
+                        ))}
+                      </select>
+                      <label className="block mb-1 font-medium" htmlFor="unit_label">Unit Label</label>
+                      <Input
+                        id="unit_label"
+                        placeholder="Unit Label"
+                        value={unitForm.unit_label}
+                        onChange={e => setUnitForm({ ...unitForm, unit_label: e.target.value })}
+                        required
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block mb-1 font-medium" htmlFor="bedrooms">Bedrooms</label>
+                          <Input
+                            id="bedrooms"
+                            type="number"
+                            placeholder="Bedrooms"
+                            value={unitForm.bedrooms}
+                            onChange={e => setUnitForm({ ...unitForm, bedrooms: Number(e.target.value) })}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block mb-1 font-medium" htmlFor="bathrooms">Bathrooms</label>
+                          <Input
+                            id="bathrooms"
+                            type="number"
+                            placeholder="Bathrooms"
+                            value={unitForm.bathrooms}
+                            onChange={e => setUnitForm({ ...unitForm, bathrooms: Number(e.target.value) })}
+                            required
+                          />
+                        </div>
+                      </div>
+                      <label className="block mb-1 font-medium" htmlFor="area_sqft">Area (sqft)</label>
+                      <Input
+                        id="area_sqft"
+                        type="number"
+                        placeholder="Area (sqft)"
+                        value={unitForm.area_sqft}
+                        onChange={e => setUnitForm({ ...unitForm, area_sqft: Number(e.target.value) })}
+                        required
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={unitForm.furnished}
+                          onChange={e => setUnitForm({ ...unitForm, furnished: e.target.checked })}
+                          id="furnished"
+                        />
+                        <label htmlFor="furnished">Furnished</label>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block mb-1 font-medium" htmlFor="rent_amount">Rent Amount</label>
+                          <Input
+                            id="rent_amount"
+                            type="number"
+                            placeholder="Rent Amount"
+                            value={unitForm.rent_amount}
+                            onChange={e => setUnitForm({ ...unitForm, rent_amount: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block mb-1 font-medium" htmlFor="rent_currency">Rent Currency</label>
+                          <Input
+                            id="rent_currency"
+                            placeholder="Rent Currency"
+                            value={unitForm.rent_currency}
+                            onChange={e => setUnitForm({ ...unitForm, rent_currency: e.target.value })}
+                            required
+                          />
+                        </div>
+                      </div>
+                      <label className="block mb-1 font-medium" htmlFor="deposit_amount">Deposit</label>
+                      <Input
+                        id="deposit_amount"
+                        type="number"
+                        placeholder="Deposit"
+                        value={unitForm.deposit_amount}
+                        onChange={e => setUnitForm({ ...unitForm, deposit_amount: e.target.value })}
+                        required
+                      />
+                      <label className="block mb-1 font-medium" htmlFor="available_from">Available From</label>
+                      <Input
+                        id="available_from"
+                        type="date"
+                        placeholder="Available From"
+                        value={unitForm.available_from}
+                        onChange={e => setUnitForm({ ...unitForm, available_from: e.target.value })}
+                        required
+                      />
+                      <label className="block mb-1 font-medium" htmlFor="status">Status</label>
+                      <select
+                        id="status"
+                        className="w-full border rounded px-2 py-2"
+                        value={unitForm.status}
+                        onChange={e => setUnitForm({ ...unitForm, status: e.target.value })}
+                        required
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                      </select>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={unitForm.is_featured}
+                          onChange={e => setUnitForm({ ...unitForm, is_featured: e.target.checked })}
+                          id="is_featured"
+                        />
+                        <label htmlFor="is_featured">Featured (show on homepage)</label>
+                      </div>
+                      <label className="block mb-1 font-medium" htmlFor="unit_description">Description</label>
+                      <textarea
+                        id="unit_description"
+                        className="w-full border rounded px-2 py-2"
+                        placeholder="Description"
+                        value={unitForm.unit_description}
+                        onChange={e => setUnitForm({ ...unitForm, unit_description: e.target.value })}
+                      />
+
+                      {/* Features selection */}
+                      <div>
+                        <label className="block mb-1 font-medium" htmlFor="unit_features">Features</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {unitForm.unit_features.map((fid: string) => {
+                            const f = features.find((ft: any) => ft.id === fid);
+                            return (
+                              <span key={fid} className="flex items-center gap-1 bg-muted px-2 py-1 rounded">
+                                {f?.name}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    setUnitForm({
+                                      ...unitForm,
+                                      unit_features: unitForm.unit_features.filter((id: string) => id !== fid),
+                                    })
+                                  }
+                                  aria-label="Remove Feature"
+                                >
+                                  <Trash className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <select
+                          id="unit_features"
+                          className="w-full border rounded px-2 py-2"
+                          value=""
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (val && !unitForm.unit_features.includes(val)) {
+                              setUnitForm({
+                                ...unitForm,
+                                unit_features: [...unitForm.unit_features, val],
+                              });
+                            }
+                          }}
+                        >
+                          <option value="">Add Feature</option>
+                          {features
+                            .filter(f => !unitForm.unit_features.includes(f.id))
+                            .map(f => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                        </select>
+                      </div>
+                      {/* Images upload */}
+                      <div>
+                        <label className="block mb-1 font-medium" htmlFor="unit_images">Unit Images</label>
+                        <input
+                          id="unit_images"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          style={{ display: "none" }}
+                          onChange={handleFileChange}
+                        />
+                        <Button
+                          className="mt-2"
+                          type="button"
+                          onClick={() => document.getElementById("unit_images")?.click()}
+                        >
+                          Add Another Image
+                        </Button>
+                        {unitImageFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {unitImageFiles.map((file, idx) => (
+                              <span key={idx} className="text-xs bg-muted px-2 py-1 rounded">
+                                {file.name}
+                                {idx === 0 && (
+                                  <span className="ml-2 text-xs text-accent font-bold">Primary</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
+                        <Button variant="outline" type="button" onClick={() => setShowAddUnit(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit">Add Unit</Button>
+                      </div>
                     </form>
                   </div>
                 </CardContent>
@@ -638,6 +867,15 @@ const AdminUnits = () => {
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
                       </select>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={unitForm.is_featured}
+                          onChange={e => setUnitForm({ ...unitForm, is_featured: e.target.checked })}
+                          id="is_featured"
+                        />
+                        <label htmlFor="is_featured">Featured (show on homepage)</label>
+                      </div>
                       <label className="block mb-1 font-medium" htmlFor="unit_description">Description</label>
                       <textarea
                         id="unit_description"
@@ -778,6 +1016,7 @@ const AdminUnits = () => {
                       <div><strong>Deposit:</strong> {selectedUnit.deposit_amount ? `${selectedUnit.deposit_amount.toLocaleString()}` : ""}</div>
                       <div><strong>Available From:</strong> {selectedUnit.available_from}</div>
                       <div><strong>Status:</strong> {selectedUnit.status}</div>
+                      <div><strong>Featured:</strong> {selectedUnit.is_featured ? "Yes" : "No"}</div>
                       <div className="sm:col-span-2"><strong>Description:</strong> <div className="mt-1">{selectedUnit.unit_description || "None"}</div></div>
                       <div className="sm:col-span-2"><strong>Features:</strong> {selectedUnit.unit_features && selectedUnit.unit_features.length > 0 ? selectedUnit.unit_features.map((fid: string) => features.find((ft: any) => ft.id === fid)?.name || "").filter(Boolean).join(", ") : "None"}</div>
                     </div>

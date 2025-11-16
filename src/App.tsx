@@ -15,6 +15,7 @@ import PropertyDetail from "./pages/PropertyDetail";
 import About from "./pages/About";
 import ServicesPage from "./pages/ServicesPage";
 import LodgerPortal from "./pages/LodgerPortal";
+import LodgerMessages from "./pages/LodgerMessages";
 import LandlordPortal from "./pages/LandlordPortal";
 import LandlordProperties from "./pages/LandlordProperties";
 import LandlordMessages from "./pages/LandlordMessages";
@@ -25,6 +26,7 @@ import AdminProperties from "./pages/AdminProperties";
 import AdminUnits from "./pages/AdminUnits";
 import AdminLandlords from "./pages/AdminLandlords";
 import AdminStaff from "./pages/AdminStaff";
+import AdminMessages from "./pages/AdminMessages";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Cookies from "./pages/Cookies";
@@ -67,6 +69,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["lodger"]}>
                   <LodgerPortal />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/lodger-messages"
+              element={
+                <ProtectedRoute allowedRoles={["lodger"]}>
+                  <LodgerMessages />
                 </ProtectedRoute>
               }
             />
@@ -156,6 +166,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin-messages"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminMessages />
+                </ProtectedRoute>
+              }
+            />  
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />

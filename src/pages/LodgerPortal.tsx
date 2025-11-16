@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
-import { Home, CreditCard, FileText, MessageSquare, Bell, User, LogOut, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Home, CreditCard, FileText, MessageSquare, Bell, User, LogOut, X, Calendar, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,8 +8,16 @@ import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/lib/supabaseClient";
 
+// Navigation options for Lodger Portal
+const NAV_LINKS = [
+  { name: "Leases", icon: <ClipboardList className="h-4 w-4 mr-1" />, to: "/lodger-leases" },
+  { name: "Messages", icon: <MessageSquare className="h-4 w-4 mr-1" />, to: "/lodger-messages" },
+  { name: "Schedules", icon: <Calendar className="h-4 w-4 mr-1" />, to: "/lodger-schedules" },
+];
+
 const LodgerPortal = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -17,6 +25,9 @@ const LodgerPortal = () => {
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const notifBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Mobile nav state
+  const [showMobileNav, setShowMobileNav] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -76,6 +87,31 @@ const LodgerPortal = () => {
           <div className="container mx-auto px-4">
             <div className="flex items-center justify-between h-16 relative">
               <img src={logo} alt="Domus Servitia" className="h-10 rounded-lg" />
+              {/* Desktop Navigation */}
+              <nav className="hidden md:flex gap-2">
+                {NAV_LINKS.map(link => (
+                  <Button
+                    key={link.name}
+                    variant="ghost"
+                    className="flex items-center gap-1 px-2"
+                    onClick={() => navigate(link.to)}
+                  >
+                    {link.icon}
+                    <span className="hidden sm:inline">{link.name}</span>
+                  </Button>
+                ))}
+              </nav>
+              {/* Mobile Navigation Button */}
+              <div className="md:hidden flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowMobileNav(v => !v)}
+                  aria-label="Open navigation"
+                >
+                  <Home className="h-6 w-6" />
+                </Button>
+              </div>
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <Button
@@ -135,6 +171,40 @@ const LodgerPortal = () => {
               </div>
             </div>
           </div>
+          {/* Mobile Navigation Drawer */}
+          {showMobileNav && (
+            <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={() => setShowMobileNav(false)}>
+              <nav
+                className="absolute top-0 right-0 w-64 h-full bg-card border-l border-border shadow-lg flex flex-col pt-8"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex justify-end px-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowMobileNav(false)}
+                    aria-label="Close navigation"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+                {NAV_LINKS.map(link => (
+                  <Button
+                    key={link.name}
+                    variant="ghost"
+                    className="flex items-center gap-2 px-4 py-3 justify-start text-lg"
+                    onClick={() => {
+                      setShowMobileNav(false);
+                      navigate(link.to);
+                    }}
+                  >
+                    {link.icon}
+                    {link.name}
+                  </Button>
+                ))}
+              </nav>
+            </div>
+          )}
         </header>
 
         <div className="container mx-auto px-4 py-8">
