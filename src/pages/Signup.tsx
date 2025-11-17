@@ -79,7 +79,7 @@ const Signup = () => {
           created_at: new Date().toISOString(),
         },
       ]);
-
+        //
     if (profileError) {
       alert(profileError.message);
       setLoading(false);

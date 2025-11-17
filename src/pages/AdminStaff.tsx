@@ -337,7 +337,7 @@ const AdminStaff = () => {
         .insert([
           {
             file_name: fileName,
-            public_url: supabase.storage.from("public").getPublicUrl(`chat/${fileName}`).publicUrl,
+            public_url: supabase.storage.from("public").getPublicUrl(`chat/${fileName}`).data.publicUrl,
           },
         ])
         .select()
