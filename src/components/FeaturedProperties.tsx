@@ -178,7 +178,7 @@ const FeaturedProperties = () => {
                     variant="outline"
                     className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300"
                   >
-                    <Link to={`/unit/${unit.id}`}>View Details</Link>
+                    <Link to={`/property/${unit.id}`}>View Details</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -192,7 +192,7 @@ const FeaturedProperties = () => {
             size="lg"
             className="bg-gradient-gold text-primary font-semibold shadow-gold hover:shadow-lifted transition-all duration-300"
           >
-            <Link to="/units">View All Units</Link>
+            <Link to="/properties">View All Units</Link>
           </Button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Users,
   UserPlus,
@@ -10,6 +10,9 @@ import {
   Trash2,
   CheckCircle,
   X,
+  MessageCircle,
+  Paperclip,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +21,11 @@ import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+
+const getCurrentAdminId = async () => {
+  const { data, error } = await supabase.auth.getUser();
+  return data?.user?.id || null;
+};
 
 const AdminStaff = () => {
   const [staffList, setStaffList] = useState<any[]>([]);
@@ -28,6 +36,16 @@ const AdminStaff = () => {
   const [selectedStaff, setSelectedStaff] = useState<any>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Chat widget state
+  const [showChatWidget, setShowChatWidget] = useState(false);
+  const [chatStaff, setChatStaff] = useState<any>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [messageText, setMessageText] = useState("");
+  const [fileUpload, setFileUpload] = useState<File | null>(null);
+  const [sending, setSending] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -46,27 +64,14 @@ const AdminStaff = () => {
 
   // Fetch staff profiles and emails from auth.users
   const fetchStaff = async () => {
-    // 1. Get staff_profiles
     const { data: staffProfiles, error } = await supabase
       .from("staff_profiles")
-      .select("user_id,first_name,last_name,phone_number,title,department,employee_number,created_at");
+      .select("user_id,first_name,last_name,phone_number,title,department,employee_number,created_at,email");
     if (error || !staffProfiles) {
       setStaffList([]);
       return;
     }
-
-    // 2. Get emails from auth.users
-    const { data: authUsers } = await supabase
-      .from("users")
-      .select("id,email");
-
-    // 3. Merge email into staffProfiles
-    const staffWithEmail = staffProfiles.map((staff: any) => {
-      const user = authUsers?.find((u: any) => u.id === staff.user_id);
-      return { ...staff, email: user?.email || "" };
-    });
-
-    setStaffList(staffWithEmail);
+    setStaffList(staffProfiles);
   };
 
   const fetchScheduledTasks = async () => {
@@ -111,15 +116,12 @@ const AdminStaff = () => {
     const employee_number = Math.floor(Math.random() * 1000000).toString();
 
     try {
-      // 1. Create user in Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
       if (error || !data.user?.id) throw new Error(error?.message || "Failed to create user");
       const user_id = data.user.id;
-
-      // 2. Insert into staff_profiles
       const { error: profileError } = await supabase.from("staff_profiles").insert([
         {
           user_id,
@@ -129,11 +131,10 @@ const AdminStaff = () => {
           title,
           department,
           employee_number,
+          email,
         },
       ]);
       if (profileError) throw new Error(profileError.message);
-
-      // 3. Create notification
       await supabase.from("notifications").insert([
         {
           user_id,
@@ -145,7 +146,6 @@ const AdminStaff = () => {
           created_at: new Date().toISOString(),
         },
       ]);
-
       toast.success("Staff created successfully!");
       setShowCreateModal(false);
       fetchStaff();
@@ -192,7 +192,6 @@ const AdminStaff = () => {
     if (!window.confirm("Are you sure you want to delete this staff member?")) return;
     setFormLoading(true);
     try {
-      // Remove from staff_profiles
       const { error } = await supabase.from("staff_profiles").delete().eq("user_id", user_id);
       if (error) throw new Error(error.message);
 
@@ -218,6 +217,150 @@ const AdminStaff = () => {
     });
     setShowEditModal(true);
   };
+
+  // --- Chat Feature ---
+  const openChatWidget = async (staff: any) => {
+    setChatStaff(staff);
+    setShowChatWidget(true);
+    const adminId = await getCurrentAdminId();
+    if (!adminId) return;
+
+    // Find or create conversation
+    let conversation = null;
+    const { data: existing } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("type", "direct")
+      .in("id", [
+        ...(await supabase
+          .from("conversation_participants")
+          .select("conversation_id")
+          .eq("user_id", adminId)).data?.map((p: any) => p.conversation_id) || [],
+      ]);
+    if (existing && existing.length > 0) {
+      // Find a conversation with both admin and staff
+      for (const conv of existing) {
+        const { data: participants } = await supabase
+          .from("conversation_participants")
+          .select("user_id")
+          .eq("conversation_id", conv.id);
+        const userIds = participants?.map((p: any) => p.user_id);
+        if (userIds?.includes(staff.user_id)) {
+          conversation = conv;
+          break;
+        }
+      }
+    }
+    if (!conversation) {
+      // Create new conversation
+      const { data: convData, error: convError } = await supabase
+        .from("conversations")
+        .insert([
+          {
+            type: "direct",
+            subject: `Chat with ${staff.first_name} ${staff.last_name}`,
+            created_by_id: adminId,
+          },
+        ])
+        .select()
+        .single();
+      if (convError || !convData) return;
+      await supabase.from("conversation_participants").insert([
+        { conversation_id: convData.id, user_id: adminId },
+        { conversation_id: convData.id, user_id: staff.user_id },
+      ]);
+      conversation = convData;
+    }
+    setConversationId(conversation.id);
+    fetchMessages(conversation.id);
+  };
+
+  const closeChatWidget = () => {
+    setShowChatWidget(false);
+    setChatStaff(null);
+    setChatMessages([]);
+    setMessageText("");
+    setFileUpload(null);
+    setConversationId(null);
+  };
+
+  // Fetch messages for conversation
+  const fetchMessages = async (convId: string) => {
+    const { data: messages } = await supabase
+      .from("conversation_messages")
+      .select(
+        `
+          id,
+          sender_id,
+          message,
+          created_at,
+          attachment,
+          asset:assets (
+            public_url
+          )
+        `
+      )
+      .eq("conversation_id", convId)
+      .order("created_at", { ascending: true });
+    setChatMessages(
+      (messages || []).map((msg: any) => ({
+        ...msg,
+        file_url: msg.asset?.public_url || null,
+      }))
+    );
+    setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+  };
+
+  // Send message handler
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messageText && !fileUpload) return;
+    setSending(true);
+
+    const adminId = await getCurrentAdminId();
+    let assetId = null;
+    if (fileUpload) {
+      const fileName = `${Date.now()}_${fileUpload.name}`;
+      const { data: assetData, error: assetError } = await supabase.storage
+        .from("public")
+        .upload(`chat/${fileName}`, fileUpload);
+      if (assetError) {
+        toast.error("File upload failed");
+        setSending(false);
+        return;
+      }
+      // Insert asset record
+      const { data: assetRow } = await supabase
+        .from("assets")
+        .insert([
+          {
+            file_name: fileName,
+            public_url: supabase.storage.from("public").getPublicUrl(`chat/${fileName}`).publicUrl,
+          },
+        ])
+        .select()
+        .single();
+      assetId = assetRow?.id;
+    }
+
+    await supabase.from("conversation_messages").insert([
+      {
+        conversation_id: conversationId,
+        sender_id: adminId,
+        message: messageText,
+        attachment: assetId,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    setMessageText("");
+    setFileUpload(null);
+    fetchMessages(conversationId!);
+    setSending(false);
+  };
+
+  // --- End Chat Feature ---
 
   return (
     <>
@@ -370,6 +513,14 @@ const AdminStaff = () => {
                               >
                                 <Trash2 className="h-4 w-4 text-red-600" />
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Message"
+                                onClick={() => openChatWidget(staff)}
+                              >
+                                <MessageCircle className="h-4 w-4 text-blue-600" />
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -440,6 +591,66 @@ const AdminStaff = () => {
             </div>
           </div>
         </div>
+
+        {/* Floating Chat Widget */}
+        {showChatWidget && chatStaff && (
+          <div className="fixed bottom-6 right-6 z-50 w-80 max-w-full bg-card rounded-lg shadow-lg border border-border flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div>
+                <span className="font-semibold">Chat with {chatStaff.first_name} {chatStaff.last_name}</span>
+              </div>
+              <Button variant="ghost" size="icon" onClick={closeChatWidget} aria-label="Close">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex-1 px-4 py-2 overflow-y-auto" style={{ minHeight: "200px", maxHeight: "300px" }}>
+              {chatMessages.length === 0 ? (
+                <div className="text-muted-foreground text-xs text-center mt-8">No messages yet.</div>
+              ) : (
+                chatMessages.map(msg => (
+                  <div key={msg.id} className={`mb-2 flex ${msg.sender_id === chatStaff.user_id ? "justify-start" : "justify-end"}`}>
+                    <div className={`rounded-lg px-3 py-2 ${msg.sender_id === chatStaff.user_id ? "bg-muted text-foreground" : "bg-gradient-gold text-primary"}`}>
+                      <div className="text-sm">{msg.message}</div>
+                      {msg.file_url && (
+                        <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="block mt-1 text-xs text-blue-600 underline">
+                          Attachment
+                        </a>
+                      )}
+                      <div className="text-[10px] text-muted-foreground text-right mt-1">
+                        {new Date(msg.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            <form className="flex items-center gap-2 px-4 py-3 border-t border-border"
+              onSubmit={handleSendMessage}>
+              <Input
+                type="text"
+                placeholder="Type a message..."
+                className="flex-1"
+                value={messageText}
+                onChange={e => setMessageText(e.target.value)}
+                disabled={sending}
+              />
+              <Input
+                type="file"
+                className="hidden"
+                id="chat-file-upload"
+                onChange={e => setFileUpload(e.target.files?.[0] || null)}
+                disabled={sending}
+              />
+              <label htmlFor="chat-file-upload" className="cursor-pointer">
+                <Paperclip className="h-5 w-5 text-muted-foreground" />
+              </label>
+              <Button type="submit" className="bg-gradient-gold text-primary font-semibold" disabled={sending}>
+                <Send className="h-5 w-5" />
+              </Button>
+            </form>
+          </div>
+        )}
 
         {/* Create Staff Modal */}
         {showCreateModal && (

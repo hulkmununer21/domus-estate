@@ -449,29 +449,29 @@ const AdminMessages = () => {
   }, [user?.id, threads, activeTab]);
 
   // Mark thread as opened when selected
-  useEffect(() => {
-    if (!selectedThreadId || !user?.id || activeTab !== "messages") return;
-    const upsertThreadRead = async () => {
-      await supabase
-        .from("conversation_thread_reads")
-        .upsert(
-          [
-            {
-              conversation_id: selectedThreadId,
-              user_id: user.id,
-              last_opened_at: new Date().toISOString(),
-            },
-          ],
-          { onConflict: ["conversation_id", "user_id"] }
-        );
-      const { data } = await supabase
-        .from("conversation_thread_reads")
-        .select("conversation_id, user_id, last_opened_at")
-        .eq("user_id", user.id);
-      setThreadReads(data || []);
-    };
-    upsertThreadRead();
-  }, [selectedThreadId, user?.id, activeTab]);
+    useEffect(() => {
+      if (!selectedThreadId || !user?.id || activeTab !== "messages") return;
+      const upsertThreadRead = async () => {
+        await supabase
+          .from("conversation_thread_reads")
+          .upsert(
+            [
+              {
+                conversation_id: selectedThreadId,
+                user_id: user.id,
+                last_opened_at: new Date().toISOString(),
+              },
+            ],
+            { onConflict: "conversation_id,user_id" }
+          );
+        const { data } = await supabase
+          .from("conversation_thread_reads")
+          .select("conversation_id, user_id, last_opened_at")
+          .eq("user_id", user.id);
+        setThreadReads(data || []);
+      };
+      upsertThreadRead();
+    }, [selectedThreadId, user?.id, activeTab]);
 
   // Fetch messages for selected thread
   useEffect(() => {

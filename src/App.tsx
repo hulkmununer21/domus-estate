@@ -20,6 +20,7 @@ import LandlordPortal from "./pages/LandlordPortal";
 import LandlordProperties from "./pages/LandlordProperties";
 import LandlordMessages from "./pages/LandlordMessages";
 import StaffPortal from "./pages/StaffPortal";
+import StaffMessaging from "./pages/StaffMessaging"; 
 import AdminPortal from "./pages/AdminPortal";
 import AdminLodgers from "./pages/AdminLodgers";
 import AdminProperties from "./pages/AdminProperties";
@@ -116,6 +117,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/staff-messaging"
+              element={
+                <ProtectedRoute allowedRoles={["staff"]}>
+                  <StaffMessaging />
+                </ProtectedRoute>
+              }
+            />  
 
             {/* Admin routes */}
             <Route
