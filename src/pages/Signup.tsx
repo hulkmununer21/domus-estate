@@ -75,6 +75,7 @@ const Signup = () => {
           first_name: formData.firstName,
           last_name: formData.lastName,
           phone_number: formData.phone,
+          email: formData.email,
           created_at: new Date().toISOString(),
         },
       ]);
