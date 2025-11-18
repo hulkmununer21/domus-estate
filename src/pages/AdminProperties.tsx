@@ -14,6 +14,7 @@ import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const TABS = [
   { key: "published", label: "Published", icon: <CheckCircle className="h-4 w-4 mr-1" /> },
@@ -33,12 +34,24 @@ const AdminProperties = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
 
+  // Leases tab state
+  const [leases, setLeases] = useState<any[]>([]);
+  const [leasesUnits, setLeasesUnits] = useState<any>({});
+  const [leasesUnitImages, setLeasesUnitImages] = useState<any>({});
+  const [leasesLodgers, setLeasesLodgers] = useState<any>({});
+  const [leasesLoading, setLeasesLoading] = useState(true);
+  const [viewLease, setViewLease] = useState<any>(null);
+
   useEffect(() => {
     fetchPropertyTypes();
     fetchProperties();
     fetchUnits();
     fetchLandlords();
-  }, []);
+    if (activeTab === "leases") {
+      fetchLeasesTabData();
+    }
+    // eslint-disable-next-line
+  }, [activeTab]);
 
   const fetchPropertyTypes = async () => {
     const { data } = await supabase.from("property_types").select("id, name");
@@ -63,6 +76,73 @@ const AdminProperties = () => {
       .from("landlord_profiles")
       .select("user_id, first_name, last_name, company_name");
     if (data) setLandlords(data);
+  };
+
+  // Leases Tab Data
+  const fetchLeasesTabData = async () => {
+    setLeasesLoading(true);
+    // 1. Fetch all leases
+    const { data: leaseRows } = await supabase
+      .from("leases")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setLeases(leaseRows || []);
+
+    // 2. Fetch units for these leases
+    const unitIds = (leaseRows || []).map(l => l.unit_id).filter(Boolean);
+    let unitsMap: any = {};
+    if (unitIds.length > 0) {
+      const { data: unitRows } = await supabase
+        .from("property_units")
+        .select("*")
+        .in("id", unitIds);
+      unitRows?.forEach(u => {
+        unitsMap[u.id] = u;
+      });
+    }
+    setLeasesUnits(unitsMap);
+
+    // 3. Fetch primary images for units
+    let imagesMap: any = {};
+    if (unitIds.length > 0) {
+      const { data: imageRows } = await supabase
+        .from("property_unit_images")
+        .select("unit_id, asset_id, is_primary")
+        .in("unit_id", unitIds)
+        .eq("is_primary", true);
+
+      const assetIds = imageRows?.map(img => img.asset_id).filter(Boolean);
+      let assetsMap: any = {};
+      if (assetIds.length > 0) {
+        const { data: assetRows } = await supabase
+          .from("assets")
+          .select("id, public_url")
+          .in("id", assetIds);
+        assetRows?.forEach(a => {
+          assetsMap[a.id] = a.public_url;
+        });
+      }
+      imageRows?.forEach(img => {
+        imagesMap[img.unit_id] = assetsMap[img.asset_id] || "";
+      });
+    }
+    setLeasesUnitImages(imagesMap);
+
+    // 4. Fetch lodger profiles
+    const lodgerIds = (leaseRows || []).map(l => l.lodger_user_id).filter(Boolean);
+    let lodgersMap: any = {};
+    if (lodgerIds.length > 0) {
+      const { data: lodgerRows } = await supabase
+        .from("lodger_profiles")
+        .select("user_id, first_name, last_name, email")
+        .in("user_id", lodgerIds);
+      lodgerRows?.forEach(l => {
+        lodgersMap[l.user_id] = l;
+      });
+    }
+    setLeasesLodgers(lodgersMap);
+
+    setLeasesLoading(false);
   };
 
   // Add Property Modal Logic
@@ -575,10 +655,124 @@ const AdminProperties = () => {
                 <CardTitle>Leases</CardTitle>
               </CardHeader>
               <CardContent>
-                {/* ...implement leases table as before... */}
-                <div className="text-muted-foreground text-sm py-8 text-center">
-                  Leases table goes here.
-                </div>
+                {leasesLoading ? (
+                  <div>Loading leases...</div>
+                ) : leases.length === 0 ? (
+                  <div>No leases found.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="py-2 px-2 text-left">Unit</th>
+                          <th className="py-2 px-2 text-left">Image</th>
+                          <th className="py-2 px-2 text-left">Lodger</th>
+                          <th className="py-2 px-2 text-left">Email</th>
+                          <th className="py-2 px-2 text-left">Status</th>
+                          <th className="py-2 px-2 text-left">Start</th>
+                          <th className="py-2 px-2 text-left">End</th>
+                          <th className="py-2 px-2 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leases.map(lease => {
+                          const unit = leasesUnits[lease.unit_id];
+                          const unitLabel = unit?.unit_label || "N/A";
+                          const unitImage = leasesUnitImages[lease.unit_id] ||
+                            "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400";
+                          const lodger = leasesLodgers[lease.lodger_user_id];
+                          const leaseStatus =
+                            !lease.signed_at && !lease.signed_document_id
+                              ? "Pending Signature"
+                              : lease.status;
+                          return (
+                            <tr key={lease.id} className="border-b border-border hover:bg-muted/40">
+                              <td className="py-2 px-2">{unitLabel}</td>
+                              <td className="py-2 px-2">
+                                <img
+                                  src={unitImage}
+                                  alt={unitLabel}
+                                  className="w-12 h-12 object-cover rounded"
+                                />
+                              </td>
+                              <td className="py-2 px-2">
+                                {lodger
+                                  ? `${lodger.first_name} ${lodger.last_name}`
+                                  : "N/A"}
+                              </td>
+                              <td className="py-2 px-2">{lodger?.email || "N/A"}</td>
+                              <td className="py-2 px-2">{leaseStatus}</td>
+                              <td className="py-2 px-2">{lease.start_date || "N/A"}</td>
+                              <td className="py-2 px-2">{lease.end_date || "N/A"}</td>
+                              <td className="py-2 px-2 text-center">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setViewLease(lease)}
+                                >
+                                  View
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {/* Lease Details Modal */}
+                {viewLease && (
+                  <Dialog open={!!viewLease} onOpenChange={() => setViewLease(null)}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Lease Details</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="font-semibold">Unit:</span> {leasesUnits[viewLease.unit_id]?.unit_label || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Lodger:</span>{" "}
+                          {leasesLodgers[viewLease.lodger_user_id]
+                            ? `${leasesLodgers[viewLease.lodger_user_id].first_name} ${leasesLodgers[viewLease.lodger_user_id].last_name}`
+                            : "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Email:</span> {leasesLodgers[viewLease.lodger_user_id]?.email || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Status:</span>{" "}
+                          {!viewLease.signed_at && !viewLease.signed_document_id
+                            ? "Pending Signature"
+                            : viewLease.status}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Start Date:</span> {viewLease.start_date || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">End Date:</span> {viewLease.end_date || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Rent Amount:</span> £{viewLease.rent_amount || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Currency:</span> {viewLease.rent_currency || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Created At:</span> {viewLease.created_at}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Updated At:</span> {viewLease.updated_at}
+                        </div>
+                      </div>
+                      <div className="flex justify-end mt-4">
+                        <Button variant="outline" onClick={() => setViewLease(null)}>
+                          Close
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
               </CardContent>
             </Card>
           )}
