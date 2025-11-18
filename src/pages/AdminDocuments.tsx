@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
+const DOCUMENT_BUCKET = "unit-images";
+
 const AdminDocuments = () => {
   const [leases, setLeases] = useState<any[]>([]);
   const [units, setUnits] = useState<any>({});
@@ -17,6 +19,7 @@ const AdminDocuments = () => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [debugMsg, setDebugMsg] = useState<string>("");
+  const [uploadedDocUrl, setUploadedDocUrl] = useState<string>("");
 
   useEffect(() => {
     fetchLeasesAndUnits();
@@ -85,13 +88,13 @@ const AdminDocuments = () => {
     setUploading(true);
 
     try {
-      // 1. Upload document to Supabase Storage
+      // 1. Upload document to Supabase Storage (unit-images bucket)
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${file.name}`;
       const filePath = `leases/${signModal.id}/${fileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("public")
+        .from(DOCUMENT_BUCKET)
         .upload(filePath, file);
 
       if (uploadError) {
@@ -104,16 +107,12 @@ const AdminDocuments = () => {
 
       // 2. Get public URL
       const { data: publicUrlData } = supabase.storage
-        .from("public")
+        .from(DOCUMENT_BUCKET)
         .getPublicUrl(filePath);
 
-      if (!publicUrlData?.publicUrl) {
-        setDebugMsg(`Public URL error: no publicUrl returned`);
-        toast.error("Failed to get public URL.");
-        setUploading(false);
-        return;
-      }
-      setDebugMsg(prev => prev + `\nPublic URL: ${publicUrlData.publicUrl}`);
+      setDebugMsg(prev => prev + `\nPublic URL: ${publicUrlData?.publicUrl}`);
+
+      setUploadedDocUrl(publicUrlData?.publicUrl || "");
 
       // 3. Insert into assets table
       const { data: assetInsert, error: assetError } = await supabase
@@ -121,7 +120,7 @@ const AdminDocuments = () => {
         .insert([{
           owner_user_id: signModal.lodger_user_id,
           storage_provider: "supabase",
-          bucket: "public",
+          bucket: DOCUMENT_BUCKET,
           file_key: filePath,
           file_name: file.name,
           public_url: publicUrlData?.publicUrl,
@@ -161,7 +160,6 @@ const AdminDocuments = () => {
 
       toast.success("Lease signed and document uploaded!");
       setUploading(false);
-      setSignModal(null);
       setFile(null);
       setSignedAt("");
       setEndDate("");
@@ -193,6 +191,9 @@ const AdminDocuments = () => {
                   const unitImage = unitImages[lease.unit_id] ||
                     "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400";
                   const isPendingSignature = !lease.signed_at && !lease.signed_document_id;
+                  const signedDocUrl = lease.signed_document_id
+                    ? undefined // Will fetch below if needed
+                    : undefined;
                   return (
                     <Card key={lease.id} className="border border-border">
                       <CardContent className="flex gap-4 items-center">
@@ -220,12 +221,19 @@ const AdminDocuments = () => {
                           <div className="text-xs text-muted-foreground mt-1">
                             Start: {lease.start_date || "N/A"} | End: {lease.end_date || "N/A"}
                           </div>
+                          {/* Show uploaded document if available */}
+                          {lease.signed_document_id && (
+                            <LeaseDocumentPreview assetId={lease.signed_document_id} />
+                          )}
                         </div>
                         {isPendingSignature && (
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => setSignModal(lease)}
+                            onClick={() => {
+                              setSignModal(lease);
+                              setUploadedDocUrl("");
+                            }}
                           >
                             Upload Signed Document
                           </Button>
@@ -281,11 +289,51 @@ const AdminDocuments = () => {
                     {debugMsg}
                   </pre>
                 )}
+                {/* Show uploaded document preview after upload */}
+                {uploadedDocUrl && (
+                  <div className="mt-4">
+                    <div className="font-semibold mb-2">Uploaded Document:</div>
+                    <a
+                      href={uploadedDocUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-700 underline"
+                    >
+                      View PDF
+                    </a>
+                  </div>
+                )}
               </form>
             </DialogContent>
           </Dialog>
         )}
       </div>
+    </div>
+  );
+};
+
+// Helper component to preview document from asset id
+const LeaseDocumentPreview = ({ assetId }: { assetId: string }) => {
+  const [url, setUrl] = useState<string>("");
+
+  useEffect(() => {
+    const fetchAsset = async () => {
+      const { data, error } = await supabase
+        .from("assets")
+        .select("public_url")
+        .eq("id", assetId)
+        .single();
+      if (data?.public_url) setUrl(data.public_url);
+    };
+    if (assetId) fetchAsset();
+  }, [assetId]);
+
+  if (!url) return null;
+  return (
+    <div className="mt-2">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">
+        View Signed Document
+      </a>
     </div>
   );
 };
