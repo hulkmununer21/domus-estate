@@ -15,6 +15,151 @@ const NAV_LINKS = [
   { name: "Schedules", icon: <Calendar className="h-4 w-4 mr-1" />, to: "/lodger-schedules" },
 ];
 
+// Utility to calculate time before expiry
+function getTimeBeforeExpiry(dueDate: string) {
+  const now = new Date();
+  const due = new Date(dueDate);
+  const diffMs = due.getTime() - now.getTime();
+  if (diffMs <= 0) return "Expired";
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  return `${diffDays} days, ${diffHours} hours`;
+}
+
+// PendingInvoices component
+const PendingInvoices = ({ userId }: { userId: string }) => {
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [units, setUnits] = useState<any>({});
+  const [unitImages, setUnitImages] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInvoicesAndUnits = async () => {
+      setLoading(true);
+      // 1. Fetch invoices for this lodger
+      const { data: invoiceRows } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("issued_to_user_id", userId)
+        .eq("status", "issued")
+        .order("due_date", { ascending: true });
+
+      setInvoices(invoiceRows || []);
+
+      // 2. Fetch units for these invoices
+      const unitIds = (invoiceRows || []).map(inv => inv.unit_id).filter(Boolean);
+      let unitsMap: any = {};
+      if (unitIds.length > 0) {
+        const { data: unitRows } = await supabase
+          .from("property_units")
+          .select("*")
+          .in("id", unitIds);
+        unitRows?.forEach(u => {
+          unitsMap[u.id] = u;
+        });
+      }
+      setUnits(unitsMap);
+
+      // 3. Fetch primary images for these units
+      let imagesMap: any = {};
+      if (unitIds.length > 0) {
+        const { data: imageRows } = await supabase
+          .from("property_unit_images")
+          .select("unit_id, asset_id, is_primary")
+          .in("unit_id", unitIds)
+          .eq("is_primary", true);
+
+        const assetIds = imageRows?.map(img => img.asset_id).filter(Boolean);
+        let assetsMap: any = {};
+        if (assetIds.length > 0) {
+          const { data: assetRows } = await supabase
+            .from("assets")
+            .select("id, public_url")
+            .in("id", assetIds);
+          assetRows?.forEach(a => {
+            assetsMap[a.id] = a.public_url;
+          });
+        }
+        imageRows?.forEach(img => {
+          imagesMap[img.unit_id] = assetsMap[img.asset_id] || "";
+        });
+      }
+      setUnitImages(imagesMap);
+
+      setLoading(false);
+    };
+
+    if (userId) fetchInvoicesAndUnits();
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <Card className="border-border mb-6">
+        <CardHeader>
+          <CardTitle>Pending Invoices</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div>Loading invoices...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-border mb-6">
+      <CardHeader>
+        <CardTitle>Pending Invoices</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {invoices.length === 0 ? (
+          <div>No pending invoices.</div>
+        ) : (
+          <div className="space-y-4">
+            {invoices.map(inv => {
+              const unit = units[inv.unit_id];
+              const unitLabel = unit?.unit_label || "N/A";
+              const unitImage = unitImages[inv.unit_id] ||
+                "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400";
+              return (
+                <div key={inv.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={unitImage}
+                      alt={unitLabel}
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                    <div>
+                      <p className="font-medium">Invoice #{inv.number}</p>
+                      <p className="text-sm text-muted-foreground">{inv.notes}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Unit: <span className="font-semibold">{unitLabel}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Due: {new Date(inv.due_date).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-accent">
+                        Time before expiry: {getTimeBeforeExpiry(inv.due_date)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-lg">
+                      £{inv.total} {inv.currency}
+                    </p>
+                    <Button className="mt-2 bg-gradient-gold text-primary font-semibold">
+                      Pay Now
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 const LodgerPortal = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -295,6 +440,9 @@ const LodgerPortal = () => {
           <div className="grid lg:grid-cols-3 gap-6">
             {/* Left Column */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Pending Invoices Section with real data */}
+              <PendingInvoices userId={user?.id ?? ""} />
+
               {/* Property Details */}
               <Card className="border-border">
                 <CardHeader>
@@ -481,3 +629,4 @@ const Notifications = ({ userId }: { userId: string }) => {
 };
 
 export default LodgerPortal;
+// filepath: /home/hulkmununer/domus/src/pages/LodgerPortal.tsx

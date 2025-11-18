@@ -97,7 +97,7 @@ const AdminRequests = () => {
     setSending(true);
 
     // Send email to requester (all cases)
-    const emailSent = await sendEmail(
+    await sendEmail(
       req.email,
       "Response to Your Lodging Request",
       responseMessage
@@ -131,17 +131,76 @@ const AdminRequests = () => {
     fetchAllData();
   };
 
-  // Initiate invoice for authenticated users
+  // Initiate invoice for authenticated users, fetch tax from settings
   const handleInitiateInvoice = async (req: any) => {
+    // 1. Fetch tax rate from settings
+    const { data: taxSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "tax_rate")
+      .single();
+
+    const taxPercent = taxSetting?.value?.percent || 0;
+
+    // 2. Fetch invoice due days from settings
+    const { data: dueDaysSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "invoice_due_days")
+      .single();
+
+    const dueDays = dueDaysSetting?.value?.days || 0;
+
+    // 3. Get rent_amount from the property_units table
+    const unit = units[req.property_id];
+    const subtotal = unit?.rent_amount ? Number(unit.rent_amount) : 0;
+
+    // 4. Calculate tax and total
+    const tax = +(subtotal * (taxPercent / 100)).toFixed(2);
+    const total = +(subtotal + tax).toFixed(2);
+    const currency = "GBP";
+    const notes = "Lodging invoice for your request";
+
+    // 5. Calculate due_date
+    const now = new Date();
+    const due_date = new Date(now.getTime() + dueDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10); // Format as YYYY-MM-DD
+
+    // Generate a random 9-digit number as a string
+    const number = Math.floor(100000000 + Math.random() * 900000000).toString();
+
+    // 6. Insert invoice
     await supabase.from("invoices").insert([
       {
+        issued_to_user_id: req.lodger_user_id,
+        unit_id: req.property_id,
+        status: "issued",
+        subtotal,
+        tax,
+        total,
+        currency,
+        notes,
+        due_date,
+        number,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+
+    // 7. Notify the lodger
+    await supabase.from("notifications").insert([
+      {
         user_id: req.lodger_user_id,
-        property_id: req.property_id,
-        amount: 500,
-        status: "pending",
+        type: "invoice",
+        title: "New Invoice Issued",
+        body: `An invoice of £${total.toFixed(2)} (including £${tax.toFixed(2)} VAT) has been issued for your lodging request. Due date: ${due_date}`,
+        channel: "web",
+        sent_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       },
     ]);
+
     toast.success("Invoice initiated!");
     fetchAllData();
   };

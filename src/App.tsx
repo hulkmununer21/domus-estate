@@ -29,6 +29,7 @@ import AdminLandlords from "./pages/AdminLandlords";
 import AdminStaff from "./pages/AdminStaff";
 import AdminMessages from "./pages/AdminMessages";
 import AdminRequests from "./pages/AdminRequests";
+import AdminPayments from "./pages/AdminPayments";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Cookies from "./pages/Cookies";
@@ -191,7 +192,15 @@ const App = () => (
                   <AdminRequests />
                 </ProtectedRoute>
               }
-            />    
+            /> 
+            <Route
+              path="/admin-payments"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminPayments />
+                </ProtectedRoute>
+              }
+            />     
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
