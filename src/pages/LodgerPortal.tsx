@@ -3,10 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { Home, CreditCard, FileText, MessageSquare, Bell, User, LogOut, X, Calendar, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/lib/supabaseClient";
+import { toast } from "sonner";
 
 // Navigation options for Lodger Portal
 const NAV_LINKS = [
@@ -26,71 +29,208 @@ function getTimeBeforeExpiry(dueDate: string) {
   return `${diffDays} days, ${diffHours} hours`;
 }
 
-// PendingInvoices component
+// Utility to generate a random reference string
+function generatePaymentReference(length = 16) {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let ref = "";
+  for (let i = 0; i < length; i++) {
+    ref += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return ref;
+}
+
+// Simulated Payment Modal
+const SimulatedPaymentModal = ({
+  open,
+  onClose,
+  invoice,
+  unit,
+  userId,
+  refreshInvoices,
+}) => {
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvc, setCvc] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    setLoading(true);
+
+    // 1. Update invoice status to 'paid'
+    await supabase
+      .from("invoices")
+      .update({ status: "paid", updated_at: new Date().toISOString() })
+      .eq("id", invoice.id);
+
+    // 2. Insert into payments table
+    const reference = generatePaymentReference();
+    await supabase.from("payments").insert([
+      {
+        invoice_id: invoice.id,
+        user_id: userId,
+        amount: invoice.total,
+        currency: invoice.currency,
+        payment_method: "card",
+        status: "successful",
+        paid_at: new Date().toISOString(),
+        reference,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    // 3. Insert into leases table (if not exists)
+    await supabase.from("leases").insert([
+      {
+        unit_id: invoice.unit_id,
+        status: "active",
+        start_date: new Date().toISOString().slice(0, 10),
+        rent_amount: invoice.subtotal,
+        rent_currency: invoice.currency,
+        lodger_user_id: userId,
+        invoice_id: invoice.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+
+    setLoading(false);
+    setSuccess(true);
+    toast.success("Payment successful!");
+    refreshInvoices();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {success ? "Payment Successful" : `Pay Invoice #${invoice.number}`}
+          </DialogTitle>
+        </DialogHeader>
+        {success ? (
+          <div className="text-center">
+            <p className="mb-4">Your payment was successful!</p>
+            <Button onClick={onClose}>Close</Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <p className="font-semibold mb-1">Amount: £{invoice.total} {invoice.currency}</p>
+              <p className="text-sm mb-1">Unit: {unit?.unit_label}</p>
+              <p className="text-sm mb-1">Due Date: {invoice.due_date}</p>
+            </div>
+            <Input
+              required
+              placeholder="Card Number"
+              value={cardNumber}
+              onChange={e => setCardNumber(e.target.value)}
+              maxLength={19}
+            />
+            <div className="flex gap-2">
+              <Input
+                required
+                placeholder="MM/YY"
+                value={expiry}
+                onChange={e => setExpiry(e.target.value)}
+                maxLength={5}
+              />
+              <Input
+                required
+                placeholder="CVC"
+                value={cvc}
+                onChange={e => setCvc(e.target.value)}
+                maxLength={4}
+              />
+            </div>
+            <Input
+              required
+              placeholder="Name on Card"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+            <Button type="submit" disabled={loading}>
+              {loading ? "Processing..." : "Submit Payment"}
+            </Button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// PendingInvoices component with payment modal
 const PendingInvoices = ({ userId }: { userId: string }) => {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [units, setUnits] = useState<any>({});
   const [unitImages, setUnitImages] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
   useEffect(() => {
-    const fetchInvoicesAndUnits = async () => {
-      setLoading(true);
-      // 1. Fetch invoices for this lodger
-      const { data: invoiceRows } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("issued_to_user_id", userId)
-        .eq("status", "issued")
-        .order("due_date", { ascending: true });
-
-      setInvoices(invoiceRows || []);
-
-      // 2. Fetch units for these invoices
-      const unitIds = (invoiceRows || []).map(inv => inv.unit_id).filter(Boolean);
-      let unitsMap: any = {};
-      if (unitIds.length > 0) {
-        const { data: unitRows } = await supabase
-          .from("property_units")
-          .select("*")
-          .in("id", unitIds);
-        unitRows?.forEach(u => {
-          unitsMap[u.id] = u;
-        });
-      }
-      setUnits(unitsMap);
-
-      // 3. Fetch primary images for these units
-      let imagesMap: any = {};
-      if (unitIds.length > 0) {
-        const { data: imageRows } = await supabase
-          .from("property_unit_images")
-          .select("unit_id, asset_id, is_primary")
-          .in("unit_id", unitIds)
-          .eq("is_primary", true);
-
-        const assetIds = imageRows?.map(img => img.asset_id).filter(Boolean);
-        let assetsMap: any = {};
-        if (assetIds.length > 0) {
-          const { data: assetRows } = await supabase
-            .from("assets")
-            .select("id, public_url")
-            .in("id", assetIds);
-          assetRows?.forEach(a => {
-            assetsMap[a.id] = a.public_url;
-          });
-        }
-        imageRows?.forEach(img => {
-          imagesMap[img.unit_id] = assetsMap[img.asset_id] || "";
-        });
-      }
-      setUnitImages(imagesMap);
-
-      setLoading(false);
-    };
-
-    if (userId) fetchInvoicesAndUnits();
+    fetchInvoicesAndUnits();
+    // eslint-disable-next-line
   }, [userId]);
+
+  const fetchInvoicesAndUnits = async () => {
+    setLoading(true);
+    const { data: invoiceRows } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("issued_to_user_id", userId)
+      .eq("status", "issued")
+      .order("due_date", { ascending: true });
+
+    setInvoices(invoiceRows || []);
+
+    const unitIds = (invoiceRows || []).map(inv => inv.unit_id).filter(Boolean);
+    let unitsMap: any = {};
+    if (unitIds.length > 0) {
+      const { data: unitRows } = await supabase
+        .from("property_units")
+        .select("*")
+        .in("id", unitIds);
+      unitRows?.forEach(u => {
+        unitsMap[u.id] = u;
+      });
+    }
+    setUnits(unitsMap);
+
+    let imagesMap: any = {};
+    if (unitIds.length > 0) {
+      const { data: imageRows } = await supabase
+        .from("property_unit_images")
+        .select("unit_id, asset_id, is_primary")
+        .in("unit_id", unitIds)
+        .eq("is_primary", true);
+
+      const assetIds = imageRows?.map(img => img.asset_id).filter(Boolean);
+      let assetsMap: any = {};
+      if (assetIds.length > 0) {
+        const { data: assetRows } = await supabase
+          .from("assets")
+          .select("id, public_url")
+          .in("id", assetIds);
+        assetRows?.forEach(a => {
+          assetsMap[a.id] = a.public_url;
+        });
+      }
+      imageRows?.forEach(img => {
+        imagesMap[img.unit_id] = assetsMap[img.asset_id] || "";
+      });
+    }
+    setUnitImages(imagesMap);
+
+    setLoading(false);
+  };
+
+  const handlePayNow = (invoice: any) => {
+    setSelectedInvoice(invoice);
+    setPayModalOpen(true);
+  };
 
   if (loading) {
     return (
@@ -106,57 +246,75 @@ const PendingInvoices = ({ userId }: { userId: string }) => {
   }
 
   return (
-    <Card className="border-border mb-6">
-      <CardHeader>
-        <CardTitle>Pending Invoices</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {invoices.length === 0 ? (
-          <div>No pending invoices.</div>
-        ) : (
-          <div className="space-y-4">
-            {invoices.map(inv => {
-              const unit = units[inv.unit_id];
-              const unitLabel = unit?.unit_label || "N/A";
-              const unitImage = unitImages[inv.unit_id] ||
-                "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400";
-              return (
-                <div key={inv.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={unitImage}
-                      alt={unitLabel}
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
-                    <div>
-                      <p className="font-medium">Invoice #{inv.number}</p>
-                      <p className="text-sm text-muted-foreground">{inv.notes}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Unit: <span className="font-semibold">{unitLabel}</span>
+    <>
+      <Card className="border-border mb-6">
+        <CardHeader>
+          <CardTitle>Pending Invoices</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {invoices.length === 0 ? (
+            <div>No pending invoices.</div>
+          ) : (
+            <div className="space-y-4">
+              {invoices.map(inv => {
+                const unit = units[inv.unit_id];
+                const unitLabel = unit?.unit_label || "N/A";
+                const unitImage = unitImages[inv.unit_id] ||
+                  "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400";
+                return (
+                  <div key={inv.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={unitImage}
+                        alt={unitLabel}
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                      <div>
+                        <p className="font-medium">Invoice #{inv.number}</p>
+                        <p className="text-sm text-muted-foreground">{inv.notes}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Unit: <span className="font-semibold">{unitLabel}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Due: {new Date(inv.due_date).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-accent">
+                          Time before expiry: {getTimeBeforeExpiry(inv.due_date)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-lg">
+                        £{inv.total} {inv.currency}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        Due: {new Date(inv.due_date).toLocaleDateString()}
-                      </p>
-                      <p className="text-xs text-accent">
-                        Time before expiry: {getTimeBeforeExpiry(inv.due_date)}
-                      </p>
+                      <Button
+                        className="mt-2 bg-gradient-gold text-primary font-semibold"
+                        onClick={() => handlePayNow(inv)}
+                      >
+                        Pay Now
+                      </Button>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-lg">
-                      £{inv.total} {inv.currency}
-                    </p>
-                    <Button className="mt-2 bg-gradient-gold text-primary font-semibold">
-                      Pay Now
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {payModalOpen && selectedInvoice && (
+        <SimulatedPaymentModal
+          open={payModalOpen}
+          onClose={() => {
+            setPayModalOpen(false);
+            setSelectedInvoice(null);
+          }}
+          invoice={selectedInvoice}
+          unit={units[selectedInvoice.unit_id]}
+          userId={userId}
+          refreshInvoices={fetchInvoicesAndUnits}
+        />
+      )}
+    </>
   );
 };
 
@@ -444,7 +602,7 @@ const LodgerPortal = () => {
               <PendingInvoices userId={user?.id ?? ""} />
 
               {/* Property Details */}
-              <Card className="border-border">
+              <Card className="border-border"> 
                 <CardHeader>
                   <CardTitle>My Property</CardTitle>
                 </CardHeader>
@@ -629,4 +787,3 @@ const Notifications = ({ userId }: { userId: string }) => {
 };
 
 export default LodgerPortal;
-// filepath: /home/hulkmununer/domus/src/pages/LodgerPortal.tsx
