@@ -16,6 +16,7 @@ import About from "./pages/About";
 import ServicesPage from "./pages/ServicesPage";
 import LodgerPortal from "./pages/LodgerPortal";
 import LodgerMessages from "./pages/LodgerMessages";
+import LodgerLeases from "./pages/LodgerLeases";
 import LandlordPortal from "./pages/LandlordPortal";
 import LandlordProperties from "./pages/LandlordProperties";
 import LandlordMessages from "./pages/LandlordMessages";
@@ -83,6 +84,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/lodger-leases"
+              element={
+                <ProtectedRoute allowedRoles={["lodger"]}>
+                  <LodgerLeases />
+                </ProtectedRoute>
+              }
+            />  
 
             {/* Landlord routes */}
             <Route
