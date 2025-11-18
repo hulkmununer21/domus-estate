@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -119,12 +118,6 @@ const LodgerLeases = () => {
                             Start: {lease.start_date || "N/A"} | End: {lease.end_date || "N/A"}
                           </div>
                         </div>
-                        {/* Optionally, add actions like view or sign */}
-                        {!lease.signed_at && !lease.signed_document_id && (
-                          <Button variant="outline" size="sm">
-                            Sign Lease
-                          </Button>
-                        )}
                       </CardContent>
                     </Card>
                   );
