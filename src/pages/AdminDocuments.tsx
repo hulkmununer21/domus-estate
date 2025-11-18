@@ -13,8 +13,10 @@ const AdminDocuments = () => {
   const [loading, setLoading] = useState(true);
   const [signModal, setSignModal] = useState<any>(null);
   const [signedAt, setSignedAt] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [debugMsg, setDebugMsg] = useState<string>("");
 
   useEffect(() => {
     fetchLeasesAndUnits();
@@ -23,14 +25,12 @@ const AdminDocuments = () => {
 
   const fetchLeasesAndUnits = async () => {
     setLoading(true);
-    // 1. Fetch all leases
     const { data: leaseRows } = await supabase
       .from("leases")
       .select("*")
       .order("created_at", { ascending: false });
     setLeases(leaseRows || []);
 
-    // 2. Fetch units for these leases
     const unitIds = (leaseRows || []).map(lease => lease.unit_id).filter(Boolean);
     let unitsMap: any = {};
     if (unitIds.length > 0) {
@@ -44,7 +44,6 @@ const AdminDocuments = () => {
     }
     setUnits(unitsMap);
 
-    // 3. Fetch primary images for these units
     let imagesMap: any = {};
     if (unitIds.length > 0) {
       const { data: imageRows } = await supabase
@@ -76,78 +75,102 @@ const AdminDocuments = () => {
   // Handle document upload and lease update
   const handleSignLease = async (e: any) => {
     e.preventDefault();
-    if (!signModal || !file || !signedAt) {
-      toast.error("Please select a file and date/time.");
+    setDebugMsg(""); // Reset debug message
+
+    if (!signModal || !file || !signedAt || !endDate) {
+      setDebugMsg("Missing required fields.");
+      toast.error("Please select a file, signed date/time, and end date/time.");
       return;
     }
     setUploading(true);
 
-    // 1. Upload document to assets table and storage
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = `leases/${signModal.id}/${fileName}`;
+    try {
+      // 1. Upload document to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${file.name}`;
+      const filePath = `leases/${signModal.id}/${fileName}`;
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("public")
-      .upload(filePath, file);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("public")
+        .upload(filePath, file);
 
-    if (uploadError) {
-      toast.error("Failed to upload document.");
+      if (uploadError) {
+        setDebugMsg(`Upload error: ${uploadError.message}`);
+        toast.error("Failed to upload document.");
+        setUploading(false);
+        return;
+      }
+      setDebugMsg(`Upload success: ${JSON.stringify(uploadData)}`);
+
+      // 2. Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from("public")
+        .getPublicUrl(filePath);
+
+      if (!publicUrlData?.publicUrl) {
+        setDebugMsg(`Public URL error: no publicUrl returned`);
+        toast.error("Failed to get public URL.");
+        setUploading(false);
+        return;
+      }
+      setDebugMsg(prev => prev + `\nPublic URL: ${publicUrlData.publicUrl}`);
+
+      // 3. Insert into assets table
+      const { data: assetInsert, error: assetError } = await supabase
+        .from("assets")
+        .insert([{
+          owner_user_id: signModal.lodger_user_id,
+          storage_provider: "supabase",
+          bucket: "public",
+          file_key: filePath,
+          file_name: file.name,
+          public_url: publicUrlData?.publicUrl,
+          content_type: file.type,
+          byte_size: file.size,
+          created_at: new Date().toISOString(),
+        }])
+        .select()
+        .single();
+
+      if (assetError || !assetInsert) {
+        setDebugMsg(`Asset insert error: ${assetError?.message}`);
+        toast.error("Failed to save document metadata.");
+        setUploading(false);
+        return;
+      }
+      setDebugMsg(prev => prev + `\nAsset Insert: ${JSON.stringify(assetInsert)}`);
+
+      // 4. Update lease with signed_at, signed_document_id, and end_date
+      const { error: leaseUpdateError } = await supabase
+        .from("leases")
+        .update({
+          signed_at: signedAt,
+          signed_document_id: assetInsert.id,
+          end_date: endDate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", signModal.id);
+
+      if (leaseUpdateError) {
+        setDebugMsg(`Lease update error: ${leaseUpdateError.message}`);
+        toast.error("Failed to update lease.");
+        setUploading(false);
+        return;
+      }
+      setDebugMsg(prev => prev + "\nLease updated successfully.");
+
+      toast.success("Lease signed and document uploaded!");
       setUploading(false);
-      return;
-    }
-
-    // Get public URL
-    const { data: publicUrlData } = supabase.storage
-      .from("public")
-      .getPublicUrl(filePath);
-
-    // 2. Insert into assets table
-    const { data: assetInsert, error: assetError } = await supabase
-      .from("assets")
-      .insert([{
-        owner_user_id: signModal.lodger_user_id,
-        storage_provider: "supabase",
-        bucket: "public",
-        file_key: filePath,
-        file_name: file.name,
-        public_url: publicUrlData?.publicUrl,
-        content_type: file.type,
-        byte_size: file.size,
-        created_at: new Date().toISOString(),
-      }])
-      .select()
-      .single();
-
-    if (assetError || !assetInsert) {
-      toast.error("Failed to save document metadata.");
+      setSignModal(null);
+      setFile(null);
+      setSignedAt("");
+      setEndDate("");
+      fetchLeasesAndUnits();
+    } catch (err: any) {
+      setDebugMsg(`Exception: ${err.message}`);
+      toast.error("Unexpected error.");
       setUploading(false);
-      return;
     }
-
-    // 3. Update lease with signed_at and signed_document_id
-    const { error: leaseUpdateError } = await supabase
-      .from("leases")
-      .update({
-        signed_at: signedAt,
-        signed_document_id: assetInsert.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", signModal.id);
-
-    if (leaseUpdateError) {
-      toast.error("Failed to update lease.");
-      setUploading(false);
-      return;
-    }
-
-    toast.success("Lease signed and document uploaded!");
-    setUploading(false);
-    setSignModal(null);
-    setFile(null);
-    setSignedAt("");
-    fetchLeasesAndUnits();
   };
 
   return (
@@ -233,6 +256,15 @@ const AdminDocuments = () => {
                   />
                 </div>
                 <div>
+                  <label className="block mb-1 font-semibold">End Date (Date & Time)</label>
+                  <Input
+                    type="datetime-local"
+                    required
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                  />
+                </div>
+                <div>
                   <label className="block mb-1 font-semibold">Signed Document (PDF)</label>
                   <Input
                     type="file"
@@ -244,6 +276,11 @@ const AdminDocuments = () => {
                 <Button type="submit" disabled={uploading}>
                   {uploading ? "Uploading..." : "Submit"}
                 </Button>
+                {debugMsg && (
+                  <pre className="bg-muted/40 p-2 mt-2 text-xs rounded text-red-700 whitespace-pre-wrap">
+                    {debugMsg}
+                  </pre>
+                )}
               </form>
             </DialogContent>
           </Dialog>
