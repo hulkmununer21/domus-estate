@@ -96,6 +96,19 @@ const SimulatedPaymentModal = ({
       },
     ]);
 
+    // 4. Insert notification for the lodger
+    await supabase.from("notifications").insert([
+      {
+        user_id: userId,
+        type: "lease",
+        title: "Lease Process Started",
+        body: "We have received your payment. Your property will be ready as soon as we link an agreement document to your rented property.",
+        channel: "web",
+        sent_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
     setLoading(false);
     setSuccess(true);
     toast.success("Payment successful!");
@@ -608,7 +621,7 @@ const LodgerPortal = () => {
                 </CardHeader>
                 <CardContent>
                   {profile?.property_unit_id ? (
-                    <PropertyDetails propertyUnitId={profile.property_unit_id} />
+                    <PropertyDetails propertyUnitId={profile.property_unit_id} lodgerUserId={user?.id ?? ""} />
                   ) : (
                     <div>No property assigned yet.</div>
                   )}
@@ -669,21 +682,34 @@ const LodgerPortal = () => {
   );
 };
 
-// Fetch and display property details
-const PropertyDetails = ({ propertyUnitId }: { propertyUnitId: string }) => {
+// Fetch and display property details with lease status
+const PropertyDetails = ({ propertyUnitId, lodgerUserId }: { propertyUnitId: string, lodgerUserId: string }) => {
   const [property, setProperty] = useState<any>(null);
+  const [lease, setLease] = useState<any>(null);
 
   useEffect(() => {
-    const fetchProperty = async () => {
-      const { data, error } = await supabase
+    const fetchPropertyAndLease = async () => {
+      // Fetch property
+      const { data: propertyData } = await supabase
         .from("property_units")
         .select("*")
         .eq("id", propertyUnitId)
         .single();
-      if (!error && data) setProperty(data);
+      setProperty(propertyData);
+
+      // Fetch lease for this property and lodger
+      const { data: leaseData } = await supabase
+        .from("leases")
+        .select("*")
+        .eq("unit_id", propertyUnitId)
+        .eq("lodger_user_id", lodgerUserId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      setLease(leaseData);
     };
-    if (propertyUnitId) fetchProperty();
-  }, [propertyUnitId]);
+    if (propertyUnitId && lodgerUserId) fetchPropertyAndLease();
+  }, [propertyUnitId, lodgerUserId]);
 
   if (!property) return <div>Loading property...</div>;
 
@@ -701,11 +727,17 @@ const PropertyDetails = ({ propertyUnitId }: { propertyUnitId: string }) => {
         <p className="text-sm text-muted-foreground mb-2">
           {property.address || "Manchester City Centre, M1 1AA"}
         </p>
-        <div className="flex gap-4 text-sm">
+        <div className="flex gap-4 text-sm mb-2">
           <span>{property.bedrooms ?? 1} Bed</span>
           <span>{property.bathrooms ?? 1} Bath</span>
           <span>{property.size_sqft ?? 450} sqft</span>
         </div>
+        {lease && (
+          <div className="text-sm">
+            <span className="font-semibold">Lease Status:</span>{" "}
+            <span className="px-2 py-1 rounded bg-muted-foreground/10">{lease.status}</span>
+          </div>
+        )}
       </div>
     </div>
   );
