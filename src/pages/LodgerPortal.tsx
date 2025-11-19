@@ -10,6 +10,7 @@ import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { useForm } from "react-hook-form";
 
 // Navigation options for Lodger Portal
 const NAV_LINKS = [
@@ -337,7 +338,7 @@ const LodgerPortal = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // New state for real lease data
+  // Quick stats
   const [activeLease, setActiveLease] = useState<any>(null);
   const [nextPaymentDays, setNextPaymentDays] = useState<number | null>(null);
   const [documentsCount, setDocumentsCount] = useState<number>(0);
@@ -350,6 +351,25 @@ const LodgerPortal = () => {
   // Mobile nav state
   const [showMobileNav, setShowMobileNav] = useState(false);
 
+  // Profile modal state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  // Password modal state
+  const [passwordMode, setPasswordMode] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+
+  // Profile form
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors }
+  } = useForm();
+
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user?.id) return;
@@ -358,11 +378,14 @@ const LodgerPortal = () => {
         .select("*")
         .eq("user_id", user.id)
         .single();
-      if (!error && data) setProfile(data);
+      if (!error && data) {
+        setProfile(data);
+        reset(data);
+      }
       setLoading(false);
     };
     fetchProfile();
-  }, [user]);
+  }, [user, reset]);
 
   // Fetch real lease data for quick stats
   useEffect(() => {
@@ -434,6 +457,72 @@ const LodgerPortal = () => {
   const handleLogout = async () => {
     await logout();
     navigate("/");
+  };
+
+  // Profile update handler
+  const handleProfileUpdate = async (data: any) => {
+    setProfileLoading(true);
+    const { error } = await supabase
+      .from("lodger_profiles")
+      .update({
+        first_name: data.first_name,
+        last_name: data.last_name,
+        phone_number: data.phone_number,
+        dob: data.dob,
+        employment_status: data.employment_status,
+        emergency_contact_name: data.emergency_contact_name,
+        emergency_contact_phone: data.emergency_contact_phone,
+        notes: data.notes,
+      })
+      .eq("user_id", user.id);
+    if (!error) {
+      toast.success("Profile updated successfully!");
+      setProfileEditMode(false);
+      // Refresh profile
+      const { data: newProfile } = await supabase
+        .from("lodger_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+      setProfile(newProfile);
+      reset(newProfile);
+    } else {
+      toast.error("Failed to update profile.");
+    }
+    setProfileLoading(false);
+  };
+
+  // Password change handler
+  const handlePasswordChange = async (data: any) => {
+    setPasswordLoading(true);
+    setPasswordError("");
+    setPasswordSuccess("");
+    if (data.new_password !== data.confirm_password) {
+      setPasswordError("New passwords do not match.");
+      setPasswordLoading(false);
+      return;
+    }
+    // Re-authenticate user with old password
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: data.old_password,
+    });
+    if (signInError) {
+      setPasswordError("Old password is incorrect.");
+      setPasswordLoading(false);
+      return;
+    }
+    // Update password
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: data.new_password,
+    });
+    if (updateError) {
+      setPasswordError("Failed to update password.");
+    } else {
+      setPasswordSuccess("Password updated successfully!");
+      setPasswordMode(false);
+    }
+    setPasswordLoading(false);
   };
 
   return (
@@ -524,7 +613,7 @@ const LodgerPortal = () => {
                     </div>
                   )}
                 </div>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={() => setShowProfileModal(true)}>
                   <User className="h-5 w-5" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={handleLogout}>
@@ -697,6 +786,205 @@ const LodgerPortal = () => {
           </div>
         </div>
       </div>
+
+      {/* Profile Modal */}
+      <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
+        <DialogContent className="max-w-md w-full">
+          <DialogHeader>
+            <DialogTitle>
+              {passwordMode ? "Change Password" : "User Profile"}
+            </DialogTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-4 right-4"
+              onClick={() => {
+                setShowProfileModal(false);
+                setProfileEditMode(false);
+                setPasswordMode(false);
+                setPasswordError("");
+                setPasswordSuccess("");
+              }}
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </DialogHeader>
+          <div className="p-2">
+            {!passwordMode ? (
+              <form
+                className="space-y-4"
+                onSubmit={handleSubmit(handleProfileUpdate)}
+              >
+                <div>
+                  <label className="block mb-1 font-medium">Email</label>
+                  <Input
+                    type="email"
+                    value={profile?.email || user?.email || ""}
+                    readOnly
+                    className="bg-muted"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">First Name</label>
+                  <Input
+                    {...register("first_name")}
+                    defaultValue={profile?.first_name || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Last Name</label>
+                  <Input
+                    {...register("last_name")}
+                    defaultValue={profile?.last_name || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Phone Number</label>
+                  <Input
+                    {...register("phone_number")}
+                    defaultValue={profile?.phone_number || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Date of Birth</label>
+                  <Input
+                    type="date"
+                    {...register("dob")}
+                    defaultValue={profile?.dob || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Employment Status</label>
+                  <Input
+                    {...register("employment_status")}
+                    defaultValue={profile?.employment_status || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Emergency Contact Name</label>
+                  <Input
+                    {...register("emergency_contact_name")}
+                    defaultValue={profile?.emergency_contact_name || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Emergency Contact Phone</label>
+                  <Input
+                    {...register("emergency_contact_phone")}
+                    defaultValue={profile?.emergency_contact_phone || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Notes</label>
+                  <Input
+                    {...register("notes")}
+                    defaultValue={profile?.notes || ""}
+                    disabled={!profileEditMode}
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  {!profileEditMode ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        type="button"
+                        onClick={() => setPasswordMode(true)}
+                      >
+                        Change Password
+                      </Button>
+                      <Button
+                        variant="default"
+                        type="button"
+                        onClick={() => setProfileEditMode(true)}
+                      >
+                        Edit
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        type="button"
+                        onClick={() => {
+                          setProfileEditMode(false);
+                          reset(profile);
+                        }}
+                        disabled={profileLoading}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={profileLoading}
+                      >
+                        {profileLoading ? "Saving..." : "Save"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </form>
+            ) : (
+              <form
+                className="space-y-4"
+                onSubmit={handleSubmit(handlePasswordChange)}
+              >
+                <div>
+                  <label className="block mb-1 font-medium">Old Password</label>
+                  <Input
+                    type="password"
+                    {...register("old_password", { required: true })}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">New Password</label>
+                  <Input
+                    type="password"
+                    {...register("new_password", { required: true })}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Confirm New Password</label>
+                  <Input
+                    type="password"
+                    {...register("confirm_password", { required: true })}
+                  />
+                </div>
+                {passwordError && (
+                  <div className="text-red-600 text-sm">{passwordError}</div>
+                )}
+                {passwordSuccess && (
+                  <div className="text-green-600 text-sm">{passwordSuccess}</div>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setPasswordMode(false);
+                      setPasswordError("");
+                      setPasswordSuccess("");
+                    }}
+                    disabled={passwordLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={passwordLoading}>
+                    {passwordLoading ? "Updating..." : "Update Password"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
