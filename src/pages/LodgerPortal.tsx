@@ -860,21 +860,22 @@ const LodgerPortal = () => {
                   <label className="block mb-1 font-medium">First Name</label>
                   <Input
                     {...register("first_name", { required: true })}
-                    disabled={!profileEditMode}
+                    // Editable when in edit mode or creating new
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Last Name</label>
                   <Input
                     {...register("last_name", { required: true })}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Phone Number</label>
                   <Input
                     {...register("phone_number")}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
@@ -882,35 +883,35 @@ const LodgerPortal = () => {
                   <Input
                     type="date"
                     {...register("dob")}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Employment Status</label>
                   <Input
                     {...register("employment_status")}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Emergency Contact Name</label>
                   <Input
                     {...register("emergency_contact_name")}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Emergency Contact Phone</label>
                   <Input
                     {...register("emergency_contact_phone")}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Notes</label>
                   <Input
                     {...register("notes")}
-                    disabled={!profileEditMode}
+                    disabled={profileEditMode ? false : !!profile}
                   />
                 </div>
                 <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
