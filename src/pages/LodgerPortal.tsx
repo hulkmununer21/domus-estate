@@ -85,7 +85,7 @@ const SimulatedPaymentModal = ({
     await supabase.from("leases").insert([
       {
         unit_id: invoice.unit_id,
-        status: "active",
+        status: "pending_signature",
         start_date: new Date().toISOString().slice(0, 10),
         rent_amount: invoice.subtotal,
         rent_currency: invoice.currency,
@@ -337,6 +337,11 @@ const LodgerPortal = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // New state for real lease data
+  const [activeLease, setActiveLease] = useState<any>(null);
+  const [nextPaymentDays, setNextPaymentDays] = useState<number | null>(null);
+  const [documentsCount, setDocumentsCount] = useState<number>(0);
+
   // Notification popup state
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -357,6 +362,41 @@ const LodgerPortal = () => {
       setLoading(false);
     };
     fetchProfile();
+  }, [user]);
+
+  // Fetch real lease data for quick stats
+  useEffect(() => {
+    const fetchLeaseStats = async () => {
+      if (!user?.id) return;
+
+      // 1. Fetch active lease for current rent
+      const { data: leaseRows } = await supabase
+        .from("leases")
+        .select("*")
+        .eq("lodger_user_id", user.id);
+
+      // Find active lease
+      const active = (leaseRows || []).find(l => l.status === "active");
+      setActiveLease(active || null);
+
+      // 2. Calculate next payment days (days between start_date and end_date)
+      if (active && active.start_date && active.end_date) {
+        const start = new Date(active.start_date);
+        const end = new Date(active.end_date);
+        const diffMs = end.getTime() - start.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        setNextPaymentDays(diffDays);
+      } else {
+        setNextPaymentDays(null);
+      }
+
+      // 3. Count documents: leases with signed_at and signed_document_id
+      const docsCount = (leaseRows || []).filter(
+        l => l.signed_at && l.signed_document_id
+      ).length;
+      setDocumentsCount(docsCount);
+    };
+    fetchLeaseStats();
   }, [user]);
 
   // Fetch notifications when popup is opened
@@ -389,6 +429,12 @@ const LodgerPortal = () => {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showNotifPopup]);
+
+  // Logout function
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
 
   return (
     <>
@@ -481,7 +527,7 @@ const LodgerPortal = () => {
                 <Button variant="ghost" size="icon">
                   <User className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={logout}>
+                <Button variant="ghost" size="icon" onClick={handleLogout}>
                   <LogOut className="h-5 w-5" />
                 </Button>
               </div>
@@ -546,7 +592,9 @@ const LodgerPortal = () => {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Current Rent</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {profile?.current_rent ? `£${profile.current_rent}/mo` : "£750/mo"}
+                      {activeLease
+                        ? `£${activeLease.rent_amount}/${activeLease.rent_currency || "GBP"}`
+                        : "Not available"}
                     </p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
@@ -562,9 +610,9 @@ const LodgerPortal = () => {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Next Payment</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {profile?.next_payment_due_in_days
-                        ? `${profile.next_payment_due_in_days} days`
-                        : "15 days"}
+                      {nextPaymentDays !== null
+                        ? `${nextPaymentDays} days`
+                        : "Not available"}
                     </p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
@@ -580,7 +628,7 @@ const LodgerPortal = () => {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Documents</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {profile?.documents_count ?? 8}
+                      {documentsCount}
                     </p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
@@ -590,21 +638,7 @@ const LodgerPortal = () => {
               </CardContent>
             </Card>
 
-            <Card className="border-border">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Messages</p>
-                    <p className="text-2xl font-bold text-foreground">
-                      {profile?.messages_count ?? 3}
-                    </p>
-                  </div>
-                  <div className="bg-accent/10 p-3 rounded-full">
-                    <MessageSquare className="h-6 w-6 text-accent" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Remove messages count card */}
           </div>
 
           {/* Main Content Grid */}
