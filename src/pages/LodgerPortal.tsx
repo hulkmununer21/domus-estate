@@ -335,7 +335,6 @@ const PendingInvoices = ({ userId }: { userId: string }) => {
 const LodgerPortal = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Quick stats
@@ -355,39 +354,136 @@ const LodgerPortal = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-
-  // Password modal state
   const [passwordMode, setPasswordMode] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [profile, setProfile] = useState<any>(null);
 
-  // Profile form
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors }
   } = useForm();
 
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user?.id) return;
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("lodger_profiles")
         .select("*")
         .eq("user_id", user.id)
         .single();
-      if (!error && data) {
+      if (data) {
         setProfile(data);
         reset(data);
+      } else {
+        // If no profile, set defaults for insert
+        reset({
+          email: user?.email || "",
+          first_name: "",
+          last_name: "",
+          phone_number: "",
+          dob: "",
+          employment_status: "",
+          emergency_contact_name: "",
+          emergency_contact_phone: "",
+          notes: "",
+        });
       }
-      setLoading(false);
     };
     fetchProfile();
   }, [user, reset]);
 
-  // Fetch real lease data for quick stats
+  // Insert or update profile
+  const handleProfileSave = async (data: any) => {
+    setProfileLoading(true);
+    let result;
+    if (profile) {
+      // Update
+      result = await supabase
+        .from("lodger_profiles")
+        .update({
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone_number: data.phone_number,
+          dob: data.dob,
+          employment_status: data.employment_status,
+          emergency_contact_name: data.emergency_contact_name,
+          emergency_contact_phone: data.emergency_contact_phone,
+          notes: data.notes,
+        })
+        .eq("user_id", user.id);
+    } else {
+      // Insert
+      result = await supabase
+        .from("lodger_profiles")
+        .insert([{
+          user_id: user.id,
+          email: user.email,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone_number: data.phone_number,
+          dob: data.dob,
+          employment_status: data.employment_status,
+          emergency_contact_name: data.emergency_contact_name,
+          emergency_contact_phone: data.emergency_contact_phone,
+          notes: data.notes,
+        }]);
+    }
+    if (!result.error) {
+      toast.success("Profile updated successfully!");
+      setProfileEditMode(false);
+      setShowProfileModal(false);
+      // Refresh profile
+      const { data: newProfile } = await supabase
+        .from("lodger_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+      setProfile(newProfile);
+      reset(newProfile);
+    } else {
+      toast.error("Failed to update profile.");
+    }
+    setProfileLoading(false);
+  };
+
+  // Password change handler
+  const handlePasswordChange = async (data: any) => {
+    setPasswordLoading(true);
+    setPasswordError("");
+    setPasswordSuccess("");
+    if (data.new_password !== data.confirm_password) {
+      setPasswordError("New passwords do not match.");
+      setPasswordLoading(false);
+      return;
+    }
+    // Re-authenticate user with old password
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: data.old_password,
+    });
+    if (signInError) {
+      setPasswordError("Old password is incorrect.");
+      setPasswordLoading(false);
+      return;
+    }
+    // Update password
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: data.new_password,
+    });
+    if (updateError) {
+      setPasswordError("Failed to update password.");
+    } else {
+      setPasswordSuccess("Password updated successfully!");
+      setPasswordMode(false);
+    }
+    setPasswordLoading(false);
+  };
+
   useEffect(() => {
     const fetchLeaseStats = async () => {
       if (!user?.id) return;
@@ -457,72 +553,6 @@ const LodgerPortal = () => {
   const handleLogout = async () => {
     await logout();
     navigate("/");
-  };
-
-  // Profile update handler
-  const handleProfileUpdate = async (data: any) => {
-    setProfileLoading(true);
-    const { error } = await supabase
-      .from("lodger_profiles")
-      .update({
-        first_name: data.first_name,
-        last_name: data.last_name,
-        phone_number: data.phone_number,
-        dob: data.dob,
-        employment_status: data.employment_status,
-        emergency_contact_name: data.emergency_contact_name,
-        emergency_contact_phone: data.emergency_contact_phone,
-        notes: data.notes,
-      })
-      .eq("user_id", user.id);
-    if (!error) {
-      toast.success("Profile updated successfully!");
-      setProfileEditMode(false);
-      // Refresh profile
-      const { data: newProfile } = await supabase
-        .from("lodger_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-      setProfile(newProfile);
-      reset(newProfile);
-    } else {
-      toast.error("Failed to update profile.");
-    }
-    setProfileLoading(false);
-  };
-
-  // Password change handler
-  const handlePasswordChange = async (data: any) => {
-    setPasswordLoading(true);
-    setPasswordError("");
-    setPasswordSuccess("");
-    if (data.new_password !== data.confirm_password) {
-      setPasswordError("New passwords do not match.");
-      setPasswordLoading(false);
-      return;
-    }
-    // Re-authenticate user with old password
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: data.old_password,
-    });
-    if (signInError) {
-      setPasswordError("Old password is incorrect.");
-      setPasswordLoading(false);
-      return;
-    }
-    // Update password
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: data.new_password,
-    });
-    if (updateError) {
-      setPasswordError("Failed to update password.");
-    } else {
-      setPasswordSuccess("Password updated successfully!");
-      setPasswordMode(false);
-    }
-    setPasswordLoading(false);
   };
 
   return (
@@ -789,10 +819,10 @@ const LodgerPortal = () => {
 
       {/* Profile Modal */}
       <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
-        <DialogContent className="max-w-md w-full">
+        <DialogContent className="max-w-md w-full p-0">
           <DialogHeader>
             <DialogTitle>
-              {passwordMode ? "Change Password" : "User Profile"}
+              {passwordMode ? "Change Password" : profileEditMode ? "Edit Profile" : "User Profile"}
             </DialogTitle>
             <Button
               variant="ghost"
@@ -810,17 +840,18 @@ const LodgerPortal = () => {
               <X className="h-5 w-5" />
             </Button>
           </DialogHeader>
-          <div className="p-2">
+          <div className="p-2 max-h-[70vh] overflow-y-auto transition-all">
             {!passwordMode ? (
               <form
                 className="space-y-4"
-                onSubmit={handleSubmit(handleProfileUpdate)}
+                onSubmit={handleSubmit(handleProfileSave)}
               >
                 <div>
                   <label className="block mb-1 font-medium">Email</label>
                   <Input
                     type="email"
-                    value={profile?.email || user?.email || ""}
+                    {...register("email")}
+                    value={user?.email || ""}
                     readOnly
                     className="bg-muted"
                   />
@@ -828,16 +859,14 @@ const LodgerPortal = () => {
                 <div>
                   <label className="block mb-1 font-medium">First Name</label>
                   <Input
-                    {...register("first_name")}
-                    defaultValue={profile?.first_name || ""}
+                    {...register("first_name", { required: true })}
                     disabled={!profileEditMode}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Last Name</label>
                   <Input
-                    {...register("last_name")}
-                    defaultValue={profile?.last_name || ""}
+                    {...register("last_name", { required: true })}
                     disabled={!profileEditMode}
                   />
                 </div>
@@ -845,7 +874,6 @@ const LodgerPortal = () => {
                   <label className="block mb-1 font-medium">Phone Number</label>
                   <Input
                     {...register("phone_number")}
-                    defaultValue={profile?.phone_number || ""}
                     disabled={!profileEditMode}
                   />
                 </div>
@@ -854,7 +882,6 @@ const LodgerPortal = () => {
                   <Input
                     type="date"
                     {...register("dob")}
-                    defaultValue={profile?.dob || ""}
                     disabled={!profileEditMode}
                   />
                 </div>
@@ -862,7 +889,6 @@ const LodgerPortal = () => {
                   <label className="block mb-1 font-medium">Employment Status</label>
                   <Input
                     {...register("employment_status")}
-                    defaultValue={profile?.employment_status || ""}
                     disabled={!profileEditMode}
                   />
                 </div>
@@ -870,7 +896,6 @@ const LodgerPortal = () => {
                   <label className="block mb-1 font-medium">Emergency Contact Name</label>
                   <Input
                     {...register("emergency_contact_name")}
-                    defaultValue={profile?.emergency_contact_name || ""}
                     disabled={!profileEditMode}
                   />
                 </div>
@@ -878,7 +903,6 @@ const LodgerPortal = () => {
                   <label className="block mb-1 font-medium">Emergency Contact Phone</label>
                   <Input
                     {...register("emergency_contact_phone")}
-                    defaultValue={profile?.emergency_contact_phone || ""}
                     disabled={!profileEditMode}
                   />
                 </div>
@@ -886,11 +910,10 @@ const LodgerPortal = () => {
                   <label className="block mb-1 font-medium">Notes</label>
                   <Input
                     {...register("notes")}
-                    defaultValue={profile?.notes || ""}
                     disabled={!profileEditMode}
                   />
                 </div>
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
                   {!profileEditMode ? (
                     <>
                       <Button
@@ -905,7 +928,7 @@ const LodgerPortal = () => {
                         type="button"
                         onClick={() => setProfileEditMode(true)}
                       >
-                        Edit
+                        {profile ? "Edit" : "Create"}
                       </Button>
                     </>
                   ) : (
@@ -915,7 +938,7 @@ const LodgerPortal = () => {
                         type="button"
                         onClick={() => {
                           setProfileEditMode(false);
-                          reset(profile);
+                          reset(profile || {});
                         }}
                         disabled={profileLoading}
                       >
@@ -925,7 +948,7 @@ const LodgerPortal = () => {
                         type="submit"
                         disabled={profileLoading}
                       >
-                        {profileLoading ? "Saving..." : "Save"}
+                        {profileLoading ? "Saving..." : profile ? "Update" : "Create"}
                       </Button>
                     </>
                   )}
@@ -963,7 +986,7 @@ const LodgerPortal = () => {
                 {passwordSuccess && (
                   <div className="text-green-600 text-sm">{passwordSuccess}</div>
                 )}
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
                   <Button
                     variant="outline"
                     type="button"
