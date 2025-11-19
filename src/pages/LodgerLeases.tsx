@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { Button } from "@/components/ui/button";
 
 const LodgerLeases = () => {
   const { user } = useAuth();
   const [leases, setLeases] = useState<any[]>([]);
   const [units, setUnits] = useState<any>({});
   const [unitImages, setUnitImages] = useState<any>({});
+  const [signedDocs, setSignedDocs] = useState<{ [leaseId: string]: { url: string; name: string } }>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,6 +68,29 @@ const LodgerLeases = () => {
     }
     setUnitImages(imagesMap);
 
+    // 4. Fetch signed documents for leases
+    let signedDocsMap: { [leaseId: string]: { url: string; name: string } } = {};
+    const signedDocIds = (leaseRows || [])
+      .filter(l => l.signed_document_id)
+      .map(l => l.signed_document_id);
+
+    if (signedDocIds.length > 0) {
+      const { data: docRows } = await supabase
+        .from("assets")
+        .select("id, public_url, file_name")
+        .in("id", signedDocIds);
+
+      (leaseRows || []).forEach(lease => {
+        if (lease.signed_document_id) {
+          const doc = docRows?.find((d: any) => d.id === lease.signed_document_id);
+          if (doc) {
+            signedDocsMap[lease.id] = { url: doc.public_url, name: doc.file_name };
+          }
+        }
+      });
+    }
+    setSignedDocs(signedDocsMap);
+
     setLoading(false);
   };
 
@@ -92,6 +117,7 @@ const LodgerLeases = () => {
                     !lease.signed_at && !lease.signed_document_id
                       ? "Pending Signature"
                       : lease.status;
+                  const signedDoc = signedDocs[lease.id];
                   return (
                     <Card key={lease.id} className="border border-border">
                       <CardContent className="flex gap-4 items-center">
@@ -110,13 +136,33 @@ const LodgerLeases = () => {
                             <span>{unit?.bathrooms ?? 1} Bath</span>
                             <span>{unit?.area_sqft ?? 450} sqft</span>
                           </div>
-                          <div className="text-sm">
+                          <div className="text-sm mb-1">
                             <span className="font-semibold">Lease Status:</span>{" "}
                             <span className="px-2 py-1 rounded bg-muted-foreground/10">{leaseStatus}</span>
                           </div>
                           <div className="text-xs text-muted-foreground mt-1">
                             Start: {lease.start_date || "N/A"} | End: {lease.end_date || "N/A"}
                           </div>
+                          {lease.signed_at && (
+                            <div className="text-xs mt-2">
+                              <span className="font-semibold">Signed At:</span>{" "}
+                              {new Date(lease.signed_at).toLocaleString()}
+                            </div>
+                          )}
+                          {signedDoc && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="font-semibold">Signed Document:</span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                asChild
+                              >
+                                <a href={signedDoc.url} download={signedDoc.name} target="_blank" rel="noopener noreferrer">
+                                  Download
+                                </a>
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -132,3 +178,4 @@ const LodgerLeases = () => {
 };
 
 export default LodgerLeases;
+// filepath: /home/hulkmununer/domus/src/pages/LodgerLeases.tsx
