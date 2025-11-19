@@ -637,8 +637,6 @@ const LodgerPortal = () => {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Remove messages count card */}
           </div>
 
           {/* Main Content Grid */}
@@ -648,54 +646,41 @@ const LodgerPortal = () => {
               {/* Pending Invoices Section with real data */}
               <PendingInvoices userId={user?.id ?? ""} />
 
-              {/* Property Details */}
-              <Card className="border-border"> 
+              {/* Property Details - show all leases for lodger */}
+              <Card className="border-border">
                 <CardHeader>
-                  <CardTitle>My Property</CardTitle>
+                  <CardTitle>My Properties</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {profile?.property_unit_id ? (
-                    <PropertyDetails propertyUnitId={profile.property_unit_id} lodgerUserId={user?.id ?? ""} />
-                  ) : (
-                    <div>No property assigned yet.</div>
-                  )}
+                  <LodgerProperties lodgerUserId={user?.id ?? ""} />
                 </CardContent>
               </Card>
 
-              {/* Recent Payments */}
+              {/* Recent Payments - scrollable */}
               <Card className="border-border">
                 <CardHeader>
                   <CardTitle>Recent Payments</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <RecentPayments userId={user?.id ?? ""} />
-                  <Button variant="outline" className="w-full mt-4">
-                    View All Payments
-                  </Button>
+                  <ScrollablePayments userId={user?.id ?? ""} />
                 </CardContent>
               </Card>
             </div>
 
             {/* Right Column */}
             <div className="space-y-6">
-              {/* Quick Actions */}
+              {/* Quick Actions - only submit complaint */}
               <Card className="border-border">
                 <CardHeader>
                   <CardTitle>Quick Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Button className="w-full bg-gradient-gold text-primary font-semibold">
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Pay Rent
-                  </Button>
-                  <Button variant="outline" className="w-full">
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Submit Complaint
-                  </Button>
-                  <Button variant="outline" className="w-full">
-                    <FileText className="h-4 w-4 mr-2" />
-                    View Documents
-                  </Button>
+                  <Link to="/lodger-messages">
+                    <Button variant="outline" className="w-full">
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Submit Complaint
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
 
@@ -716,104 +701,92 @@ const LodgerPortal = () => {
   );
 };
 
-// Fetch and display property details with lease status
-const PropertyDetails = ({ propertyUnitId, lodgerUserId }: { propertyUnitId: string, lodgerUserId: string }) => {
-  const [property, setProperty] = useState<any>(null);
-  const [lease, setLease] = useState<any>(null);
+// Fetch and display all properties linked to the lodger (all leases)
+const LodgerProperties = ({ lodgerUserId }: { lodgerUserId: string }) => {
+  const [leases, setLeases] = useState<any[]>([]);
+  const [units, setUnits] = useState<any>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchPropertyAndLease = async () => {
-      // Fetch property
-      const { data: propertyData } = await supabase
-        .from("property_units")
-        .select("*")
-        .eq("id", propertyUnitId)
-        .single();
-      setProperty(propertyData);
-
-      // Fetch lease for this property and lodger
-      const { data: leaseData } = await supabase
+    const fetchLeasesAndUnits = async () => {
+      const { data: leaseRows } = await supabase
         .from("leases")
         .select("*")
-        .eq("unit_id", propertyUnitId)
-        .eq("lodger_user_id", lodgerUserId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      setLease(leaseData);
+        .eq("lodger_user_id", lodgerUserId);
+      setLeases(leaseRows || []);
+      const unitIds = (leaseRows || []).map(l => l.unit_id).filter(Boolean);
+      let unitsMap: any = {};
+      if (unitIds.length > 0) {
+        const { data: unitRows } = await supabase
+          .from("property_units")
+          .select("*")
+          .in("id", unitIds);
+        unitRows?.forEach(u => { unitsMap[u.id] = u; });
+      }
+      setUnits(unitsMap);
+      setLoading(false);
     };
-    if (propertyUnitId && lodgerUserId) fetchPropertyAndLease();
-  }, [propertyUnitId, lodgerUserId]);
+    if (lodgerUserId) fetchLeasesAndUnits();
+  }, [lodgerUserId]);
 
-  if (!property) return <div>Loading property...</div>;
+  if (loading) return <div>Loading properties...</div>;
+  if (!leases.length) return <div>No properties found.</div>;
 
   return (
-    <div className="flex gap-4">
-      <img
-        src={property.image_url || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400"}
-        alt="Property"
-        className="w-32 h-32 object-cover rounded-lg"
-      />
-      <div className="flex-1">
-        <h3 className="font-semibold text-lg mb-2">
-          {property.name || "Modern City Centre Studio"}
-        </h3>
-        <p className="text-sm text-muted-foreground mb-2">
-          {property.address || "Manchester City Centre, M1 1AA"}
-        </p>
-        <div className="flex gap-4 text-sm mb-2">
-          <span>{property.bedrooms ?? 1} Bed</span>
-          <span>{property.bathrooms ?? 1} Bath</span>
-          <span>{property.size_sqft ?? 450} sqft</span>
-        </div>
-        {lease && (
-          <div className="text-sm">
-            <span className="font-semibold">Lease Status:</span>{" "}
-            <span className="px-2 py-1 rounded bg-muted-foreground/10">{lease.status}</span>
+    <div className="space-y-4">
+      {leases.map(lease => {
+        const unit = units[lease.unit_id];
+        return (
+          <div key={lease.id} className="flex gap-4 items-center border-b pb-4">
+            <img
+              src={unit?.image_url || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400"}
+              alt={unit?.unit_label || "Unit"}
+              className="w-20 h-20 object-cover rounded-lg"
+            />
+            <div>
+              <div className="font-semibold">{unit?.unit_label || "N/A"}</div>
+              <div className="text-sm text-muted-foreground">{unit?.unit_description || "No description"}</div>
+              <div className="text-xs text-muted-foreground">
+                {unit?.bedrooms ?? 1} Bed, {unit?.bathrooms ?? 1} Bath, {unit?.area_sqft ?? 450} sqft
+              </div>
+              <div className="text-sm mt-1">
+                <span className="font-semibold">Lease Status:</span>{" "}
+                <span className="px-2 py-1 rounded bg-muted-foreground/10">{lease.status}</span>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 };
 
-// Fetch and display recent payments
-const RecentPayments = ({ userId }: { userId: string }) => {
+// Fetch and display all payments, scrollable
+const ScrollablePayments = ({ userId }: { userId: string }) => {
   const [payments, setPayments] = useState<any[]>([]);
-
   useEffect(() => {
     const fetchPayments = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("payments")
         .select("*")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(3);
-      if (!error && data) setPayments(data);
+        .order("created_at", { ascending: false });
+      setPayments(data || []);
     };
     if (userId) fetchPayments();
   }, [userId]);
-
   if (!payments.length) return <div>No payments found.</div>;
-
   return (
-    <div className="space-y-4">
-      {payments.map((payment, index) => (
-        <div
-          key={index}
-          className="flex items-center justify-between py-3 border-b border-border last:border-0"
-        >
+    <div style={{ maxHeight: 300, overflowY: "auto" }}>
+      {payments.map((payment, idx) => (
+        <div key={idx} className="flex items-center justify-between py-3 border-b border-border last:border-0">
           <div>
             <p className="font-medium">{new Date(payment.created_at).toLocaleDateString()}</p>
-            <p className="text-sm text-muted-foreground">
-              {payment.description || "Monthly Rent"}
-            </p>
+            <p className="text-sm text-muted-foreground">{payment.description || "Monthly Rent"}</p>
           </div>
           <div className="text-right">
             <p className="font-semibold">£{payment.amount}</p>
-            <p className={`text-sm ${payment.status === "Paid" ? "text-green-600" : "text-red-600"}`}>
-              {payment.status}
-            </p>
+            <p className={`text-sm ${payment.status === "Paid" ? "text-green-600" : "text-red-600"}`}>{payment.status}</p>
           </div>
         </div>
       ))}
