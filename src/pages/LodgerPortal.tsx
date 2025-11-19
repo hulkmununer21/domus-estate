@@ -381,7 +381,6 @@ const LodgerPortal = () => {
       } else {
         // If no profile, set defaults for insert
         reset({
-          email: user?.email || "",
           first_name: "",
           last_name: "",
           phone_number: "",
@@ -844,14 +843,9 @@ const LodgerPortal = () => {
               onSubmit={handleSubmit(handleProfileSave)}
             >
               <div>
-                <label className="block mb-1 font-medium">Email</label>
-                <Input
-                  type="email"
-                  {...register("email")}
-                  value={user?.email || ""}
-                  readOnly
-                  className="bg-muted"
-                />
+                <span className="block mb-1 font-medium">
+                  Email: {user?.email || profile?.email || ""}
+                </span>
               </div>
               <div>
                 <label className="block mb-1 font-medium">First Name</label>
