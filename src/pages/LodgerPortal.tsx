@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Home, CreditCard, FileText, MessageSquare, Bell, User, LogOut, X, Calendar, ClipboardList } from "lucide-react";
+import { Home, CreditCard, FileText, MessageSquare, Bell, User, LogOut, X, Calendar, ClipboardList, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -352,9 +352,8 @@ const LodgerPortal = () => {
 
   // Profile modal state
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [passwordMode, setPasswordMode] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
@@ -435,7 +434,6 @@ const LodgerPortal = () => {
     }
     if (!result.error) {
       toast.success("Profile updated successfully!");
-      setProfileEditMode(false);
       setShowProfileModal(false);
       // Refresh profile
       const { data: newProfile } = await supabase
@@ -479,7 +477,7 @@ const LodgerPortal = () => {
       setPasswordError("Failed to update password.");
     } else {
       setPasswordSuccess("Password updated successfully!");
-      setPasswordMode(false);
+      setShowPasswordModal(false);
     }
     setPasswordLoading(false);
   };
@@ -643,8 +641,13 @@ const LodgerPortal = () => {
                     </div>
                   )}
                 </div>
+                {/* Profile Icon */}
                 <Button variant="ghost" size="icon" onClick={() => setShowProfileModal(true)}>
                   <User className="h-5 w-5" />
+                </Button>
+                {/* Settings Icon for password */}
+                <Button variant="ghost" size="icon" onClick={() => setShowPasswordModal(true)}>
+                  <Settings className="h-5 w-5" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={handleLogout}>
                   <LogOut className="h-5 w-5" />
@@ -821,19 +824,14 @@ const LodgerPortal = () => {
       <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
         <DialogContent className="max-w-md w-full p-0">
           <DialogHeader>
-            <DialogTitle>
-              {passwordMode ? "Change Password" : profileEditMode ? "Edit Profile" : "User Profile"}
-            </DialogTitle>
+            <DialogTitle>User Profile</DialogTitle>
             <Button
               variant="ghost"
               size="icon"
               className="absolute top-4 right-4"
               onClick={() => {
                 setShowProfileModal(false);
-                setProfileEditMode(false);
-                setPasswordMode(false);
-                setPasswordError("");
-                setPasswordSuccess("");
+                setProfileLoading(false);
               }}
               aria-label="Close"
             >
@@ -841,171 +839,143 @@ const LodgerPortal = () => {
             </Button>
           </DialogHeader>
           <div className="p-2 max-h-[70vh] overflow-y-auto transition-all">
-            {!passwordMode ? (
-              <form
-                className="space-y-4"
-                onSubmit={handleSubmit(handleProfileSave)}
-              >
-                <div>
-                  <label className="block mb-1 font-medium">Email</label>
-                  <Input
-                    type="email"
-                    {...register("email")}
-                    value={user?.email || ""}
-                    readOnly
-                    className="bg-muted"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">First Name</label>
-                  <Input
-                    {...register("first_name", { required: true })}
-                    // Editable when in edit mode or creating new
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Last Name</label>
-                  <Input
-                    {...register("last_name", { required: true })}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Phone Number</label>
-                  <Input
-                    {...register("phone_number")}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Date of Birth</label>
-                  <Input
-                    type="date"
-                    {...register("dob")}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Employment Status</label>
-                  <Input
-                    {...register("employment_status")}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Emergency Contact Name</label>
-                  <Input
-                    {...register("emergency_contact_name")}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Emergency Contact Phone</label>
-                  <Input
-                    {...register("emergency_contact_phone")}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Notes</label>
-                  <Input
-                    {...register("notes")}
-                    disabled={profileEditMode ? false : !!profile}
-                  />
-                </div>
-                <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
-                  {!profileEditMode ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        type="button"
-                        onClick={() => setPasswordMode(true)}
-                      >
-                        Change Password
-                      </Button>
-                      <Button
-                        variant="default"
-                        type="button"
-                        onClick={() => setProfileEditMode(true)}
-                      >
-                        {profile ? "Edit" : "Create"}
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="outline"
-                        type="button"
-                        onClick={() => {
-                          setProfileEditMode(false);
-                          reset(profile || {});
-                        }}
-                        disabled={profileLoading}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={profileLoading}
-                      >
-                        {profileLoading ? "Saving..." : profile ? "Update" : "Create"}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </form>
-            ) : (
-              <form
-                className="space-y-4"
-                onSubmit={handleSubmit(handlePasswordChange)}
-              >
-                <div>
-                  <label className="block mb-1 font-medium">Old Password</label>
-                  <Input
-                    type="password"
-                    {...register("old_password", { required: true })}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">New Password</label>
-                  <Input
-                    type="password"
-                    {...register("new_password", { required: true })}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Confirm New Password</label>
-                  <Input
-                    type="password"
-                    {...register("confirm_password", { required: true })}
-                  />
-                </div>
-                {passwordError && (
-                  <div className="text-red-600 text-sm">{passwordError}</div>
-                )}
-                {passwordSuccess && (
-                  <div className="text-green-600 text-sm">{passwordSuccess}</div>
-                )}
-                <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => {
-                      setPasswordMode(false);
-                      setPasswordError("");
-                      setPasswordSuccess("");
-                    }}
-                    disabled={passwordLoading}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={passwordLoading}>
-                    {passwordLoading ? "Updating..." : "Update Password"}
-                  </Button>
-                </div>
-              </form>
-            )}
+            <form
+              className="space-y-4"
+              onSubmit={handleSubmit(handleProfileSave)}
+            >
+              <div>
+                <label className="block mb-1 font-medium">Email</label>
+                <Input
+                  type="email"
+                  {...register("email")}
+                  value={user?.email || ""}
+                  readOnly
+                  className="bg-muted"
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">First Name</label>
+                <Input
+                  {...register("first_name", { required: true })}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Last Name</label>
+                <Input
+                  {...register("last_name", { required: true })}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Phone Number</label>
+                <Input
+                  {...register("phone_number")}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Date of Birth</label>
+                <Input
+                  type="date"
+                  {...register("dob")}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Employment Status</label>
+                <Input
+                  {...register("employment_status")}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Emergency Contact Name</label>
+                <Input
+                  {...register("emergency_contact_name")}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Emergency Contact Phone</label>
+                <Input
+                  {...register("emergency_contact_phone")}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Notes</label>
+                <Input
+                  {...register("notes")}
+                />
+              </div>
+              <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
+                <Button
+                  type="submit"
+                  disabled={profileLoading}
+                >
+                  {profileLoading ? "Saving..." : profile ? "Update" : "Create"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Modal */}
+      <Dialog open={showPasswordModal} onOpenChange={setShowPasswordModal}>
+        <DialogContent className="max-w-md w-full p-0">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-4 right-4"
+              onClick={() => {
+                setShowPasswordModal(false);
+                setPasswordError("");
+                setPasswordSuccess("");
+                setPasswordLoading(false);
+              }}
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </DialogHeader>
+          <div className="p-2 max-h-[70vh] overflow-y-auto transition-all">
+            <form
+              className="space-y-4"
+              onSubmit={handleSubmit(handlePasswordChange)}
+            >
+              <div>
+                <label className="block mb-1 font-medium">Old Password</label>
+                <Input
+                  type="password"
+                  {...register("old_password", { required: true })}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">New Password</label>
+                <Input
+                  type="password"
+                  {...register("new_password", { required: true })}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Confirm New Password</label>
+                <Input
+                  type="password"
+                  {...register("confirm_password", { required: true })}
+                />
+              </div>
+              {passwordError && (
+                <div className="text-red-600 text-sm">{passwordError}</div>
+              )}
+              {passwordSuccess && (
+                <div className="text-green-600 text-sm">{passwordSuccess}</div>
+              )}
+              <div className="flex gap-2 justify-end sticky bottom-0 bg-card py-2">
+                <Button
+                  type="submit"
+                  disabled={passwordLoading}
+                >
+                  {passwordLoading ? "Updating..." : "Update Password"}
+                </Button>
+              </div>
+            </form>
           </div>
         </DialogContent>
       </Dialog>
