@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import SEO from "@/components/SEO";
 import logo from "@/assets/logo.png";
 import { supabase } from "@/lib/supabaseClient";
@@ -28,6 +27,7 @@ const LodgerMessages = () => {
   const [newThreadDescription, setNewThreadDescription] = useState("");
   const [creatingThread, setCreatingThread] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch complaints (threads) for this lodger
   useEffect(() => {
@@ -269,6 +269,15 @@ const LodgerMessages = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Responsive textarea handler
+  const chatInputRefHandler = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setChatInput(e.target.value);
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = "auto";
+      chatInputRef.current.style.height = chatInputRef.current.scrollHeight + "px";
+    }
+  };
+
   // Send message handler
   const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -315,6 +324,9 @@ const LodgerMessages = () => {
     ]);
     setChatInput("");
     setChatAttachment(null);
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = "auto";
+    }
   };
 
   // File input for chat attachment
@@ -559,11 +571,14 @@ const LodgerMessages = () => {
                   {/* Chat Input */}
                   {selectedComplaint && (
                     <form className="flex gap-2" onSubmit={handleSendChat}>
-                      <Input
+                      <textarea
+                        ref={chatInputRef}
                         placeholder="Type your message..."
                         value={chatInput}
-                        onChange={e => setChatInput(e.target.value)}
-                        className="flex-1"
+                        onChange={chatInputRefHandler}
+                        rows={1}
+                        className="flex-1 resize-none border rounded px-2 py-2 min-h-[40px] max-h-[200px] transition-all"
+                        style={{ overflow: "hidden" }}
                       />
                       <label className="flex items-center gap-1 cursor-pointer">
                         <Paperclip className="h-4 w-4" />
@@ -623,8 +638,9 @@ const LodgerMessages = () => {
                     <label className="block mb-1 font-medium" htmlFor="subject">
                       Subject
                     </label>
-                    <Input
+                    <input
                       id="subject"
+                      className="w-full border rounded px-2 py-2"
                       placeholder="Subject"
                       value={newThreadSubject}
                       onChange={e => setNewThreadSubject(e.target.value)}
