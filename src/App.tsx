@@ -20,6 +20,7 @@ import LodgerLeases from "./pages/LodgerLeases";
 import LandlordPortal from "./pages/LandlordPortal";
 import LandlordProperties from "./pages/LandlordProperties";
 import LandlordMessages from "./pages/LandlordMessages";
+import LandlordPayments from "./pages/LandlordPayments";
 import StaffPortal from "./pages/StaffPortal";
 import StaffMessaging from "./pages/StaffMessaging"; 
 import AdminPortal from "./pages/AdminPortal";
@@ -119,6 +120,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/landlord-payments"
+              element={
+                <ProtectedRoute allowedRoles={["landlord"]}>
+                  <LandlordPayments />
+                </ProtectedRoute>
+              }
+            />  
 
             {/* Staff routes */}
             <Route

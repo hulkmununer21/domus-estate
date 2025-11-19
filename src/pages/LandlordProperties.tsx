@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import {
   Home,
   ClipboardList,
-  Users,
   Calendar,
   CheckCircle,
+  Eye,
+  FileText,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,23 +19,24 @@ import { supabase } from "@/lib/supabaseClient";
 const TABS = [
   { key: "properties", label: "Properties", icon: <Home className="h-4 w-4 mr-1" /> },
   { key: "units", label: "Units", icon: <ClipboardList className="h-4 w-4 mr-1" /> },
-  { key: "lodgers", label: "Lodgers", icon: <Users className="h-4 w-4 mr-1" /> },
   { key: "leases", label: "Leases/Bookings", icon: <Calendar className="h-4 w-4 mr-1" /> },
 ];
 
 const LandlordProperties = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const landlordUserId = user?.id;
 
   // State
   const [activeTab, setActiveTab] = useState("properties");
   const [properties, setProperties] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
-  const [lodgers, setLodgers] = useState<any[]>([]);
   const [leases, setLeases] = useState<any[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [propertyTypeOptions, setPropertyTypeOptions] = useState<any[]>([]);
+  const [lodgers, setLodgers] = useState<any[]>([]);
+  const [assets, setAssets] = useState<any[]>([]);
 
   // Fetch property types for dropdown
   useEffect(() => {
@@ -58,12 +61,42 @@ const LandlordProperties = () => {
     fetchUnits();
   }, [properties]);
 
-  // Fetch lodgers for units
+  // Fetch leases for units
   useEffect(() => {
     if (!units.length) return;
-    fetchLodgers();
     fetchLeases();
   }, [units]);
+
+  // Fetch lodger profiles and assets for leases
+  useEffect(() => {
+    if (!leases.length) return;
+
+    // Lodger profiles
+    const lodgerIds = Array.from(new Set(leases.map(l => l.lodger_user_id).filter(Boolean)));
+    if (lodgerIds.length > 0) {
+      supabase
+        .from("lodger_profiles")
+        .select("user_id, first_name, last_name, email")
+        .in("user_id", lodgerIds)
+        .then(({ data }) => setLodgers(data || []));
+    } else {
+      setLodgers([]);
+    }
+
+    // Assets (signed documents)
+    const assetIds = Array.from(
+      new Set(leases.map(l => l.signed_document_id).filter(Boolean))
+    );
+    if (assetIds.length > 0) {
+      supabase
+        .from("assets")
+        .select("id, file_name, public_url")
+        .in("id", assetIds)
+        .then(({ data }) => setAssets(data || []));
+    } else {
+      setAssets([]);
+    }
+  }, [leases]);
 
   const fetchProperties = async () => {
     const { data } = await supabase
@@ -87,29 +120,6 @@ const LandlordProperties = () => {
     if (data) setUnits(data);
   };
 
-  const fetchLodgers = async () => {
-    const unitIds = units.map((u: any) => u.id);
-    if (!unitIds.length) {
-      setLodgers([]);
-      return;
-    }
-    const { data: leaseData } = await supabase
-      .from("leases")
-      .select("lodger_user_id")
-      .in("unit_id", unitIds)
-      .eq("status", "occupied");
-    const lodgerIds = leaseData?.map((l: any) => l.lodger_user_id) ?? [];
-    if (!lodgerIds.length) {
-      setLodgers([]);
-      return;
-    }
-    const { data: lodgerProfiles } = await supabase
-      .from("lodger_profiles")
-      .select("*")
-      .in("user_id", lodgerIds);
-    setLodgers(lodgerProfiles || []);
-  };
-
   const fetchLeases = async () => {
     const unitIds = units.map((u: any) => u.id);
     if (!unitIds.length) {
@@ -129,11 +139,26 @@ const LandlordProperties = () => {
     setActiveTab("units");
   };
 
+  // Helper to get lodger info
+  const getLodgerInfo = (userId: string) => {
+    return lodgers.find(l => l.user_id === userId);
+  };
+
+  // Helper to get unit info
+  const getUnitInfo = (unitId: string) => {
+    return units.find(u => u.id === unitId);
+  };
+
+  // Helper to get signed document asset
+  const getSignedDocument = (assetId: string) => {
+    return assets.find(a => a.id === assetId);
+  };
+
   return (
     <>
       <SEO
         title="Landlord Properties - Domus Servitia"
-        description="View your properties, units, lodgers, and leases/bookings."
+        description="View your properties, units, and leases/bookings."
         canonical="https://domusservitia.co.uk/landlord-properties"
       />
       <div className="min-h-screen bg-muted/30">
@@ -192,11 +217,11 @@ const LandlordProperties = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Active Lodgers</p>
-                    <p className="text-2xl font-bold text-foreground">{lodgers.length}</p>
+                    <p className="text-sm text-muted-foreground mb-1">Leases</p>
+                    <p className="text-2xl font-bold text-foreground">{leases.length}</p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
-                    <Users className="h-6 w-6 text-accent" />
+                    <Calendar className="h-6 w-6 text-accent" />
                   </div>
                 </div>
               </CardContent>
@@ -305,6 +330,7 @@ const LandlordProperties = () => {
                           <th className="py-2 px-2 text-left">Deposit</th>
                           <th className="py-2 px-2 text-left">Available From</th>
                           <th className="py-2 px-2 text-left">Status</th>
+                          <th className="py-2 px-2 text-left">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -329,6 +355,16 @@ const LandlordProperties = () => {
                               </td>
                               <td className="py-2 px-2">{unit.available_from}</td>
                               <td className="py-2 px-2">{unit.status}</td>
+                              <td className="py-2 px-2 flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => navigate(`/property/${unit.id}`)}
+                                  aria-label="Preview Property"
+                                >
+                                  <Eye className="h-4 w-4 mr-1" /> Preview
+                                </Button>
+                              </td>
                             </tr>
                           ))}
                       </tbody>
@@ -338,47 +374,6 @@ const LandlordProperties = () => {
                     <Button variant="outline" onClick={() => setActiveTab("properties")}>
                       Back to Properties
                     </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Lodgers Tab */}
-          {activeTab === "lodgers" && (
-            <div>
-              <Card className="border-border">
-                <CardHeader>
-                  <CardTitle>Active Lodgers</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="py-2 px-2 text-left">Unit</th>
-                          <th className="py-2 px-2 text-left">Lodger</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {leases
-                          .filter(lease => lease.status === "occupied")
-                          .map(lease => {
-                            const unit = units.find((u: any) => u.id === lease.unit_id);
-                            const lodger = lodgers.find((l: any) => l.user_id === lease.lodger_user_id);
-                            return (
-                              <tr key={lease.id} className="border-b border-border hover:bg-muted/40">
-                                <td className="py-2 px-2">{unit?.unit_label || ""}</td>
-                                <td className="py-2 px-2">
-                                  {lodger
-                                    ? `${lodger.first_name} ${lodger.last_name}`
-                                    : ""}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
                   </div>
                 </CardContent>
               </Card>
@@ -398,43 +393,48 @@ const LandlordProperties = () => {
                       <thead>
                         <tr className="border-b border-border">
                           <th className="py-2 px-2 text-left">Unit</th>
-                          <th className="py-2 px-2 text-left">Lodger</th>
-                          <th className="py-2 px-2 text-left">Status</th>
+                          <th className="py-2 px-2 text-left">Lodger Name</th>
+                          <th className="py-2 px-2 text-left">Lease Status</th>
                           <th className="py-2 px-2 text-left">Start Date</th>
                           <th className="py-2 px-2 text-left">End Date</th>
-                          <th className="py-2 px-2 text-left">Rent</th>
-                          <th className="py-2 px-2 text-left">Deposit</th>
-                          <th className="py-2 px-2 text-left">Payment Day</th>
+                          <th className="py-2 px-2 text-left">Rent Amount</th>
                           <th className="py-2 px-2 text-left">Signed At</th>
+                          <th className="py-2 px-2 text-left">Signed Document</th>
                         </tr>
                       </thead>
                       <tbody>
                         {leases.map(lease => {
-                          const unit = units.find((u: any) => u.id === lease.unit_id);
-                          const lodger = lodgers.find((l: any) => l.user_id === lease.lodger_user_id);
+                          const unit = getUnitInfo(lease.unit_id);
+                          const lodger = getLodgerInfo(lease.lodger_user_id);
+                          const signedDoc = getSignedDocument(lease.signed_document_id);
                           return (
                             <tr key={lease.id} className="border-b border-border hover:bg-muted/40">
                               <td className="py-2 px-2">{unit?.unit_label || ""}</td>
-                              <td className="py-2 px-2">
-                                {lodger
-                                  ? `${lodger.first_name} ${lodger.last_name}`
-                                  : ""}
-                              </td>
+                              <td className="py-2 px-2">{lodger ? `${lodger.first_name} ${lodger.last_name}` : ""}</td>
                               <td className="py-2 px-2">{lease.status}</td>
                               <td className="py-2 px-2">{lease.start_date}</td>
                               <td className="py-2 px-2">{lease.end_date}</td>
                               <td className="py-2 px-2">
-                                {lease.rent_amount_cents
-                                  ? `${(lease.rent_amount_cents / 100).toLocaleString()} ${lease.rent_currency || "USD"}`
+                                {lease.rent_amount
+                                  ? `${(lease.rent_amount).toLocaleString()} ${lease.rent_currency || "USD"}`
                                   : ""}
                               </td>
-                              <td className="py-2 px-2">
-                                {lease.deposit_cents
-                                  ? `${(lease.deposit_cents / 100).toLocaleString()}`
-                                  : ""}
-                              </td>
-                              <td className="py-2 px-2">{lease.payment_day_of_month}</td>
                               <td className="py-2 px-2">{lease.signed_at}</td>
+                              <td className="py-2 px-2">
+                                {signedDoc ? (
+                                  <a
+                                    href={signedDoc.public_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-accent underline"
+                                  >
+                                    <FileText className="h-4 w-4" />
+                                    {signedDoc.file_name || "Document"}
+                                  </a>
+                                ) : (
+                                  <span className="text-muted-foreground">No Document</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
