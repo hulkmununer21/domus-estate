@@ -448,34 +448,60 @@ const LodgerPortal = () => {
     setProfileLoading(false);
   };
 
+  const validatePassword = (password: string) => {
+    // At least 5 letters, at least 1 symbol, at least 1 digit
+    const letterCount = (password.match(/[a-zA-Z]/g) || []).length;
+    const hasSymbol = /[@%&*]/.test(password);
+    const hasDigit = /\d/.test(password);
+    return letterCount >= 5 && hasSymbol && hasDigit;
+  };
+
   // Password change handler
   const handlePasswordChange = async (data: any) => {
     setPasswordLoading(true);
     setPasswordError("");
     setPasswordSuccess("");
+
     if (data.new_password !== data.confirm_password) {
       setPasswordError("New passwords do not match.");
       setPasswordLoading(false);
+      toast.error("New passwords do not match.");
       return;
     }
+
+    if (!validatePassword(data.new_password)) {
+      setPasswordError(
+        "Password must have at least 5 letters, 1 symbol (@, %, &, *), and 1 digit."
+      );
+      setPasswordLoading(false);
+      toast.error("Password must have at least 5 letters, 1 symbol (@, %, &, *), and 1 digit.");
+      return;
+    }
+
     // Re-authenticate user with old password
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: user.email,
       password: data.old_password,
     });
+
     if (signInError) {
       setPasswordError("Old password is incorrect.");
       setPasswordLoading(false);
+      toast.error("Old password is incorrect.");
       return;
     }
+
     // Update password
     const { error: updateError } = await supabase.auth.updateUser({
       password: data.new_password,
     });
+
     if (updateError) {
       setPasswordError("Failed to update password.");
+      toast.error("Failed to update password.");
     } else {
       setPasswordSuccess("Password updated successfully!");
+      toast.success("Password updated successfully!");
       setShowPasswordModal(false);
     }
     setPasswordLoading(false);
