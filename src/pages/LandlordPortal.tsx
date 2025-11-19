@@ -13,7 +13,6 @@ const NAV_LINKS = [
   { name: "Properties", icon: <Home className="h-4 w-4 mr-1" />, to: "/landlord-properties" },
   { name: "Messages", icon: <Bell className="h-4 w-4 mr-1" />, to: "/landlord-messages" },
   { name: "Schedules", icon: <Users className="h-4 w-4 mr-1" />, to: "/landlord-schedules" },
-  
   { name: "Payments", icon: <DollarSign className="h-4 w-4 mr-1" />, to: "/landlord-payments" },
 ];
 
@@ -40,6 +39,14 @@ const LandlordPortal = () => {
 
   // Mobile nav state
   const [showMobileNav, setShowMobileNav] = useState(false);
+
+  // Real data states
+  const [propertyUnits, setPropertyUnits] = useState<any[]>([]);
+  const [leases, setLeases] = useState<any[]>([]);
+  const [totalProperties, setTotalProperties] = useState(0);
+  const [activeLodgers, setActiveLodgers] = useState(0);
+  const [monthlyIncome, setMonthlyIncome] = useState(0);
+  const [documentsCount, setDocumentsCount] = useState(0);
 
   // Fetch notifications when popup is opened
   useEffect(() => {
@@ -90,6 +97,55 @@ const LandlordPortal = () => {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showNotifPopup]);
+
+  // Fetch property units and leases for dashboard
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user?.id) return;
+
+      // Fetch property units linked to landlord
+      const { data: units, error: unitsError } = await supabase
+        .from("property_units")
+        .select("*")
+        .eq("landlord_id", user.id);
+
+      setPropertyUnits(units || []);
+      setTotalProperties(units?.length || 0);
+
+      // Fetch leases for these units
+      const unitIds = (units || []).map(u => u.id);
+      let leasesData: any[] = [];
+      if (unitIds.length > 0) {
+        const { data: leasesArr, error: leasesError } = await supabase
+          .from("leases")
+          .select("*")
+          .in("unit_id", unitIds);
+        leasesData = leasesArr || [];
+        setLeases(leasesData);
+      } else {
+        setLeases([]);
+      }
+
+      // Active lodgers = count of leases with status 'active'
+      const activeLeases = leasesData.filter(l => l.status === "active");
+      setActiveLodgers(activeLeases.length);
+
+      // Monthly income = sum of rent_amount for active leases
+      const monthlyIncomeSum = activeLeases.reduce(
+        (sum, lease) => sum + (lease.rent_amount ? Number(lease.rent_amount) : 0),
+        0
+      );
+      setMonthlyIncome(monthlyIncomeSum);
+
+      // Documents count (example: from documents table)
+      const { data: docs, error: docsError } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("landlord_id", user.id);
+      setDocumentsCount(docs?.length || 0);
+    };
+    fetchDashboardData();
+  }, [user]);
 
   // Handle profile update
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -143,6 +199,12 @@ const LandlordPortal = () => {
       setOldPassword("");
       setNewPassword("");
     }
+  };
+
+  // Helper: Get property status
+  const getPropertyStatus = (unitId: string) => {
+    const lease = leases.find(l => l.unit_id === unitId && l.status === "active");
+    return lease ? "Occupied" : "Available";
   };
 
   return (
@@ -442,7 +504,7 @@ const LandlordPortal = () => {
                     <p className="text-sm text-muted-foreground mb-1">
                       Total Properties
                     </p>
-                    <p className="text-2xl font-bold text-foreground">12</p>
+                    <p className="text-2xl font-bold text-foreground">{totalProperties}</p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
                     <Home className="h-6 w-6 text-accent" />
@@ -458,7 +520,7 @@ const LandlordPortal = () => {
                     <p className="text-sm text-muted-foreground mb-1">
                       Active Lodgers
                     </p>
-                    <p className="text-2xl font-bold text-foreground">10</p>
+                    <p className="text-2xl font-bold text-foreground">{activeLodgers}</p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
                     <Users className="h-6 w-6 text-accent" />
@@ -474,7 +536,7 @@ const LandlordPortal = () => {
                     <p className="text-sm text-muted-foreground mb-1">
                       Monthly Income
                     </p>
-                    <p className="text-2xl font-bold text-foreground">£9,500</p>
+                    <p className="text-2xl font-bold text-foreground">£{monthlyIncome.toLocaleString()}</p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
                     <DollarSign className="h-6 w-6 text-accent" />
@@ -488,7 +550,7 @@ const LandlordPortal = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Documents</p>
-                    <p className="text-2xl font-bold text-foreground">24</p>
+                    <p className="text-2xl font-bold text-foreground">{documentsCount}</p>
                   </div>
                   <div className="bg-accent/10 p-3 rounded-full">
                     <FileText className="h-6 w-6 text-accent" />
@@ -509,65 +571,50 @@ const LandlordPortal = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {[
-                      {
-                        name: "Modern City Centre Studio",
-                        location: "Manchester, M1 1AA",
-                        rent: "£750/mo",
-                        status: "Occupied",
-                        image:
-                          "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=200",
-                      },
-                      {
-                        name: "Riverside Apartment",
-                        location: "Bristol, BS1 5TH",
-                        rent: "£950/mo",
-                        status: "Occupied",
-                        image:
-                          "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=200",
-                      },
-                      {
-                        name: "Cozy 1-Bed Flat",
-                        location: "Leeds, LS1 4AP",
-                        rent: "£650/mo",
-                        status: "Available",
-                        image:
-                          "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=200",
-                      },
-                    ].map((property, index) => (
-                      <div
-                        key={index}
-                        className="flex gap-4 p-4 border border-border rounded-lg hover:shadow-elegant transition-all"
-                      >
-                        <img
-                          src={property.image}
-                          alt={property.name}
-                          className="w-24 h-24 object-cover rounded-lg"
-                        />
-                        <div className="flex-1">
-                          <h3 className="font-semibold mb-1">{property.name}</h3>
-                          <p className="text-sm text-muted-foreground mb-2">
-                            {property.location}
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-accent">
-                              {property.rent}
-                            </span>
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full ${
-                                property.status === "Occupied"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                              }`}
-                            >
-                              {property.status}
-                            </span>
+                    {propertyUnits.length === 0 ? (
+                      <div className="text-sm text-muted-foreground py-6 text-center">
+                        No properties found.
+                      </div>
+                    ) : (
+                      propertyUnits.map((property, index) => (
+                        <div
+                          key={property.id}
+                          className="flex gap-4 p-4 border border-border rounded-lg hover:shadow-elegant transition-all"
+                        >
+                          <img
+                            src={property.image_url || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=200"}
+                            alt={property.name}
+                            className="w-24 h-24 object-cover rounded-lg"
+                          />
+                          <div className="flex-1">
+                            <h3 className="font-semibold mb-1">{property.name}</h3>
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {property.location}
+                            </p>
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-accent">
+                                £{property.rent_amount ? property.rent_amount : "N/A"}/mo
+                              </span>
+                              <span
+                                className={`text-xs px-2 py-1 rounded-full ${
+                                  getPropertyStatus(property.id) === "Occupied"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                }`}
+                              >
+                                {getPropertyStatus(property.id)}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
-                  <Button variant="outline" className="w-full mt-4">
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4"
+                    onClick={() => navigate("/landlord-properties")}
+                  >
                     View All Properties
                   </Button>
                 </CardContent>
